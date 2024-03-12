@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "gen-linkml-profile"
+version = "0.1.0"
+description = ""
+authors = ["Ritger Teunissen <ritger.teunissen@alliander.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+linkml = "^1.7.5"
+click = "^8.1.7"
+
+[tool.poetry.scripts]
+gen-linkml-profile = "gen_linkml_profile.__main__:cli"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
