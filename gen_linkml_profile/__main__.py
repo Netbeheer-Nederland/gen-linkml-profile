@@ -1,14 +1,23 @@
 # -*- coding: utf-8 -*-
 
 from click import option, group, argument, File
+from xml.etree import ElementTree
+from xml.etree.ElementTree import XMLPullParser
+from collections import deque
 
 from dataclasses import dataclass
 from linkml.generators.linkmlgen import LinkmlGenerator
+
+from pprint import pprint
 
 import logging
 log = logging.getLogger(__name__)
 
 LOG_FORMAT = '[%(asctime)s] [%(levelname)s] %(message)s'
+
+XMI_NS = '{http://www.omg.org/spec/XMI/20131001}'
+EVT_START = 'start'
+EVT_END = 'end'
 
 
 @dataclass
@@ -160,3 +169,81 @@ def profile(yamlfile, class_name, data_product, **kwargs):
     )
     gen.profile(class_names=class_name, data_product=data_product)
     print(gen.serialize())
+
+
+@cli.command()
+@argument('xmifile')
+def testxmi(xmifile, **kwargs):
+    """ """
+    namespaces = {
+        'xmi': "http://www.omg.org/spec/XMI/20131001",
+        'uml': "http://www.omg.org/spec/UML/20161101",
+        'umldi': "http://www.omg.org/spec/UML/20161101/UMLDI",
+        'dc': "http://www.omg.org/spec/UML/20161101/UMLDC",
+        'thecustomprofile': "http://www.sparxsystems.com/profiles/thecustomprofile/1.0",
+        'EAUML': "http://www.sparxsystems.com/profiles/EAUML/1.0"
+        }
+    # tree = ElementTree.parse(xmifile)
+    # root = tree.getroot()
+    # for c in (tree.findall('.//packagedElement[@xmi:type="uml:Package"]', namespaces)):
+    #     pprint(c.attrib['name'])
+
+    def _is_package(elem, elem_type):
+        return elem.tag == 'packagedElement' and elem_type == 'uml:Package'
+
+    def _is_class(elem, elem_type):
+        return elem.tag == 'packagedElement' and elem_type == 'uml:Class'
+
+    def _is_generalization(elem, elem_type):
+        return elem.tag == 'generalization' and elem_type == 'uml:Generalization'
+
+    def _is_attribute(elem, elem_type):
+        return elem.tag == 'ownedAttribute' and elem_type == 'uml:Property'
+
+    def _is_enumeration(elem, elem_type):
+        return elem.tag == 'packagedElement' and elem_type == 'uml:Enumeration'
+
+    def _find_element(package, idref):
+        return package.find(f'.//element[@xmi:idref="{idref}"]', namespaces)
+
+    def _find_attribute(package, idref):
+        return package.find(f'.//attribute[@xmi:idref="{idref}"]', namespaces)
+
+    def _get_parent(package, idref):
+        pass
+
+    parser = XMLPullParser(events=('start', 'end'))
+    with open(xmifile, 'rb') as f:
+        parser.feed(f.read())
+    packages = deque()
+    c_def, s_def = None, None
+    # Process events
+    for event, elem in parser.read_events():
+        elem_type = elem.get(f'{XMI_NS}type', None)
+        package_name = '::'.join([x.get('name') for x in packages])
+        if event == EVT_START:
+            elem_name = elem.get('name', None)
+            if _is_package(elem, elem_type):
+                packages.append(elem)
+            if _is_class(elem, elem_type):
+                if elem_name is None:
+                    continue
+                log.info(f'Processing class "{package_name}::{elem_name}"')
+                c_def = True
+                # TODO: create a new SchemaView for package if none exists
+                # TODO: get documentation, generate URI and figure out 'is_a'
+            if _is_attribute(elem, elem_type):
+                # TODO: convert attribute to slot definition
+                # TODO: add slot definition to class
+                pass
+            if _is_generalization(elem, elem_type):
+                # Only allow generalization if a class definition is available
+                if c_def is None:
+                    continue
+                # TODO: Find parent and create 'is_a' attribute
+                idref = elem.get('general')
+        if event == EVT_END:
+            if _is_package(elem, elem_type):
+                packages.pop()
+            if _is_class(elem, elem_type):
+                c_def = None
