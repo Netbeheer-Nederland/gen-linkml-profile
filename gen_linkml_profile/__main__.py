@@ -4,9 +4,14 @@ from click import option, group, argument, File
 from xml.etree import ElementTree
 from xml.etree.ElementTree import XMLPullParser
 from collections import deque
+from enum import Enum
 
 from dataclasses import dataclass
 from linkml.generators.linkmlgen import LinkmlGenerator
+from linkml_runtime.linkml_model.meta import (ClassDefinition,
+                                              ClassDefinitionName,
+                                              SlotDefinition,
+                                              SlotDefinitionName)
 
 from pprint import pprint
 
@@ -56,6 +61,10 @@ class ProfilingLinkmlGenerator(LinkmlGenerator):
                 s_def.range = identifier.range
             except ValueError:
                 continue
+
+    def add_class(self, c_def):
+        """Add a new class to the SchemaView"""
+        self.schemaview.add_class(c_def)
 
     def clean(self, found):
         """Remove any unused references from the model.
@@ -172,8 +181,9 @@ def profile(yamlfile, class_name, data_product, **kwargs):
 
 
 @cli.command()
+@option('--template', '-t', required=True, help='Template LinkML schema')
 @argument('xmifile')
-def testxmi(xmifile, **kwargs):
+def testxmi(xmifile, template, **kwargs):
     """ """
     namespaces = {
         'xmi': "http://www.omg.org/spec/XMI/20131001",
@@ -183,10 +193,63 @@ def testxmi(xmifile, **kwargs):
         'thecustomprofile': "http://www.sparxsystems.com/profiles/thecustomprofile/1.0",
         'EAUML': "http://www.sparxsystems.com/profiles/EAUML/1.0"
         }
-    # tree = ElementTree.parse(xmifile)
-    # root = tree.getroot()
-    # for c in (tree.findall('.//packagedElement[@xmi:type="uml:Package"]', namespaces)):
-    #     pprint(c.attrib['name'])
+    tree = ElementTree.parse(xmifile)
+    root = tree.getroot()
+
+    def _get_value(elem, xpath=None, attr=None):
+        """ """
+        v = elem.find(xpath) if xpath is not None else elem
+        if v is None:
+            return ''
+        return v.text.strip() if attr is None else v.get(attr, '').strip()
+
+    p_defs, c_defs, s_defs = {}, {}, {}
+    # Process all packages in the extension
+    for p in root.findall(f'.//element[@{XMI_NS}type="uml:Package"]'):
+        p_name = p.get('name')
+        if p_name is None:
+            continue
+        log.info(f'Found package "{p_name}"')
+        # Each package is a new Generator
+        gen = ProfilingLinkmlGenerator(
+            template,
+            materialize_attributes=False,
+            materialize_patterns=False,
+            **kwargs
+        )
+        gen.name = p_name
+        gen.title = p_name
+        gen.description = _get_value(p, 'properties', 'documentation')
+        # gen.id is set as part of processing the packagedElements
+        p_defs[_get_value(p, attr=f'{XMI_NS}idref')] = gen
+    log.info(f'Processed [{len(p_defs)}] packages')
+    # Process all classes in the extension
+    for c in root.findall(f'.//element[@{XMI_NS}type="uml:Class"]'):
+        c_id = _get_value(c, attr=f'{XMI_NS}idref')
+        c_name = c.get('name')
+        if c_name is None:
+            continue
+        c_def = ClassDefinition(name=c_name)
+        c_def.class_uri = f'cim:{c_name}'    # TODO: add namespace to output!
+        c_def.description = _get_value(c, 'properties', 'documentation')
+        # c_def.is_a is replaced as part of processing the packagedElements
+        is_a = _get_value(c, f'.//Generalization[@start="{c_id}"]', 'end')
+        if len(is_a) > 0:
+            c_def.is_a = is_a
+        c_defs[c_id] = c_def
+    log.info(f'Processed [{len(c_defs)}] classes')
+    # Process all attributes in the extension
+    for s in root.findall('.//attribute'):
+        s_name = s.get('name')
+        if s_name is None:
+            continue
+        s_def = SlotDefinition(name=s_name)
+        s_def.description = _get_value(s, 'documentation', 'value')
+        # s_def.range is set as part of processing the packagedElements
+        s_defs[_get_value(s, attr=f'{XMI_NS}idref')] = s_def
+    log.info(f'Processed [{len(s_defs)}] attributes')
+    # TODO: Process all enumerations
+    # TODO: Process all types
 
     def _is_package(elem, elem_type):
         return elem.tag == 'packagedElement' and elem_type == 'uml:Package'
@@ -194,56 +257,80 @@ def testxmi(xmifile, **kwargs):
     def _is_class(elem, elem_type):
         return elem.tag == 'packagedElement' and elem_type == 'uml:Class'
 
-    def _is_generalization(elem, elem_type):
-        return elem.tag == 'generalization' and elem_type == 'uml:Generalization'
-
     def _is_attribute(elem, elem_type):
         return elem.tag == 'ownedAttribute' and elem_type == 'uml:Property'
 
     def _is_enumeration(elem, elem_type):
         return elem.tag == 'packagedElement' and elem_type == 'uml:Enumeration'
 
-    def _find_element(package, idref):
-        return package.find(f'.//element[@xmi:idref="{idref}"]', namespaces)
-
-    def _find_attribute(package, idref):
-        return package.find(f'.//attribute[@xmi:idref="{idref}"]', namespaces)
-
-    def _get_parent(package, idref):
-        pass
-
+    # Process the packagedElements
     parser = XMLPullParser(events=('start', 'end'))
     with open(xmifile, 'rb') as f:
         parser.feed(f.read())
-    packages = deque()
-    c_def, s_def = None, None
+    packages, p_names = {}, deque()
+    p_def, c_def, s_def = None, None, None
     # Process events
     for event, elem in parser.read_events():
-        elem_type = elem.get(f'{XMI_NS}type', None)
-        package_name = '::'.join([x.get('name') for x in packages])
+        elem_type = _get_value(elem, attr=f'{XMI_NS}type')
         if event == EVT_START:
-            elem_name = elem.get('name', None)
+            # --- Package -----------------------------------------------------
+
             if _is_package(elem, elem_type):
-                packages.append(elem)
-            if _is_class(elem, elem_type):
-                if elem_name is None:
+                # Set the Package ID to identify the package to add class to
+                p_id = _get_value(elem, attr=f'{XMI_NS}id')
+                p_names.append(_get_value(elem, attr='name'))
+                if p_id not in p_defs:
                     continue
-                log.info(f'Processing class "{package_name}::{elem_name}"')
-                c_def = True
-                # TODO: create a new SchemaView for package if none exists
-                # TODO: get documentation, generate URI and figure out 'is_a'
+                packages['/'.join(p_names)] = p_def = p_defs[p_id]
+
+            # --- Class -------------------------------------------------------
+
+            if _is_class(elem, elem_type):
+                if p_def is None:
+                    continue
+                c_id = _get_value(elem, attr=f'{XMI_NS}id')
+                if c_id not in c_defs:
+                    continue
+                c_def = c_defs[c_id]
+                log.info(f'Processing class "{"::".join(p_names)}::{c_def.name}"')
+                # Set c_def.is_a
+                if c_def.is_a is not None and c_def.is_a in c_defs:
+                    c_def.is_a = c_defs[c_def.is_a].name
+                p_def.add_class(c_def)
+
+            # --- Slot --------------------------------------------------------
+
             if _is_attribute(elem, elem_type):
-                # TODO: convert attribute to slot definition
-                # TODO: add slot definition to class
-                pass
-            if _is_generalization(elem, elem_type):
-                # Only allow generalization if a class definition is available
                 if c_def is None:
                     continue
-                # TODO: Find parent and create 'is_a' attribute
-                idref = elem.get('general')
+                s_id = _get_value(elem, attr=f'{XMI_NS}id')
+                if s_id not in s_defs:
+                    continue
+                s_def = s_defs[s_id]
+                s_def.slot_uri = f'cim:{c_def.name}.{s_def.name}'
+                # Set s_def.range
+                r_id = _get_value(elem, 'type', attr=f'{XMI_NS}idref')
+                log.info(r_id)
+                if len(r_id) > 0 and r_id in c_defs:
+                    s_def.range = c_defs[r_id].name
+                # Cardinality
+                lv = _get_value(elem, 'lowerValue', 'value')
+                uv = _get_value(elem, 'upperValue', 'value')
+                s_def.required = True if lv == 1 else None
+                s_def.multivalued = True if uv == '*' else None
+                # Add slot to class
+                c_def.attributes[s_def.name] = s_def
+
         if event == EVT_END:
             if _is_package(elem, elem_type):
-                packages.pop()
+                p_names.pop()
+                p_def = None
             if _is_class(elem, elem_type):
                 c_def = None
+            if _is_attribute(elem, elem_type):
+                s_def = None
+
+    # print(c_defs['EAID_EEB4990E_A0CF_4f4b_981C_2A2C774153BC'])
+    print(packages['Model/TC57CIM/IEC61970/Base/Wires'].serialize())
+
+    #log.info(f'Processed [{len(c_defs)}] classes in [{len(packages)}] packages')
