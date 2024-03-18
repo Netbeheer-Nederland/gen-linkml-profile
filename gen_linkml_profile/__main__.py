@@ -11,7 +11,9 @@ from linkml.generators.linkmlgen import LinkmlGenerator
 from linkml_runtime.linkml_model.meta import (ClassDefinition,
                                               ClassDefinitionName,
                                               SlotDefinition,
-                                              SlotDefinitionName)
+                                              SlotDefinitionName,
+                                              EnumDefinition,
+                                              PermissibleValue)
 
 from pprint import pprint
 
@@ -66,11 +68,30 @@ class ProfilingLinkmlGenerator(LinkmlGenerator):
         """Add a new class to the SchemaView"""
         self.schemaview.add_class(c_def)
 
+    def add_enum(self, e_def):
+        """Add a new enumeration to the SchemaView"""
+        self.schemaview.add_enum(e_def)
+
+    def all_classes(self):
+        """Return all classes in the schemaview.
+        TODO: add caching & cache invalidation.
+        """
+        return self.schemaview.all_classes()
+
+    def all_enums(self):
+        """Return all enums in the schemaview.
+        TODO: add caching & cache invalidation.
+        """
+        return self.schemaview.all_enums()
+
     def clean(self, found):
         """Remove any unused references from the model.
 
         Terrible idea: delete all enums, types and classes not in {found}.
         This works because you cannot mix names for different elements.
+
+        TODO: this really was a terrible idea, split out _found_ in classes,
+        enums, types and slots
         """
         # Delete all unused classes
         all_classes = self.schemaview.all_classes()
@@ -174,11 +195,86 @@ def profile(yamlfile, class_name, data_product, **kwargs):
         yamlfile,
         materialize_attributes=False,
         materialize_patterns=False,
+        merge_imports=False,
         **kwargs
     )
     gen.profile(class_names=class_name, data_product=data_product)
     print(gen.serialize())
 
+
+def _get_value(elem, xpath=None, attr=None):
+    """Helper function to get values from XML element or attribute """
+    v = elem.find(xpath) if xpath is not None else elem
+    if v is None:
+        return ''
+    return v.text.strip() if attr is None else v.get(attr, '').strip()
+
+
+def _parse_extension(root, template):
+    """ """
+    p_defs, c_defs, s_defs,  e_defs = {}, {}, {}, {}
+    # Process all packages in the extension
+    for p in root.findall(f'.//element[@{XMI_NS}type="uml:Package"]'):
+        p_name = p.get('name')
+        if p_name is None:
+            continue
+        log.info(f'Found package "{p_name}"')
+        # Each package is a new Generator
+        gen = ProfilingLinkmlGenerator(
+            template,
+            materialize_attributes=False,
+            materialize_patterns=False
+        )
+        gen.title = p_name
+        gen.description = _get_value(p, 'properties', 'documentation')
+        # gen.id is set as part of processing the packagedElements
+        p_defs[_get_value(p, attr=f'{XMI_NS}idref')] = gen
+    log.info(f'Processed [{len(p_defs)}] packages')
+    # Process all classes in the extension
+    for c in root.findall(f'.//element[@{XMI_NS}type="uml:Class"]'):
+        c_id = _get_value(c, attr=f'{XMI_NS}idref')
+        c_name = c.get('name')
+        if c_name is None:
+            continue
+        # Enumerations are a special type of uml:Class in the extension
+        if _get_value(c, 'properties', 'stereotype') == 'enumeration':
+            e_def = EnumDefinition(name=c_name)
+            # Populate permissible values
+            for e in c.findall('.//attribute'):
+                e_name = _get_value(e, attr='name')
+                e_meaning = f'cim:{c_name}.{e_name}'
+                try:
+                    # Each PermissibleValue can have a _meaning_
+                    e_value = PermissibleValue(text=e_name, meaning=e_meaning)
+                except ValueError:
+                    log.warning(f'URI "{e_meaning}" is not a valid URI')
+                    e_value = PermissibleValue(text=e_name)
+                e_def.permissible_values[e_name] = e_value
+            e_defs[c_id] = e_def
+            # Skip to next class, do not process enumerations any further
+            continue
+        c_def = ClassDefinition(name=c_name)
+        c_def.class_uri = f'cim:{c_name}'    # TODO: add namespace to output!
+        c_def.description = _get_value(c, 'properties', 'documentation')
+        # c_def.is_a is replaced as part of processing the packagedElements
+        is_a = _get_value(c, f'.//Generalization[@start="{c_id}"]', 'end')
+        if len(is_a) > 0:
+            c_def.is_a = is_a
+        c_defs[c_id] = c_def
+    log.info(f'Processed [{len(c_defs)}] classes')
+    log.info(f'Processed [{len(e_defs)}] enumerations')
+    # Process all attributes in the extension
+    for s in root.findall('.//attribute'):
+        s_name = s.get('name')
+        if s_name is None:
+            continue
+        s_def = SlotDefinition(name=s_name)
+        s_def.description = _get_value(s, 'documentation', 'value')
+        # s_def.range is set as part of processing the packagedElements
+        s_defs[_get_value(s, attr=f'{XMI_NS}idref')] = s_def
+    log.info(f'Processed [{len(s_defs)}] attributes')
+    #
+    return (p_defs, c_defs, s_defs, e_defs)
 
 @cli.command()
 @option('--template', '-t', required=True, help='Template LinkML schema')
@@ -194,62 +290,7 @@ def testxmi(xmifile, template, **kwargs):
         'EAUML': "http://www.sparxsystems.com/profiles/EAUML/1.0"
         }
     tree = ElementTree.parse(xmifile)
-    root = tree.getroot()
-
-    def _get_value(elem, xpath=None, attr=None):
-        """ """
-        v = elem.find(xpath) if xpath is not None else elem
-        if v is None:
-            return ''
-        return v.text.strip() if attr is None else v.get(attr, '').strip()
-
-    p_defs, c_defs, s_defs = {}, {}, {}
-    # Process all packages in the extension
-    for p in root.findall(f'.//element[@{XMI_NS}type="uml:Package"]'):
-        p_name = p.get('name')
-        if p_name is None:
-            continue
-        log.info(f'Found package "{p_name}"')
-        # Each package is a new Generator
-        gen = ProfilingLinkmlGenerator(
-            template,
-            materialize_attributes=False,
-            materialize_patterns=False,
-            **kwargs
-        )
-        gen.name = p_name
-        gen.title = p_name
-        gen.description = _get_value(p, 'properties', 'documentation')
-        # gen.id is set as part of processing the packagedElements
-        p_defs[_get_value(p, attr=f'{XMI_NS}idref')] = gen
-    log.info(f'Processed [{len(p_defs)}] packages')
-    # Process all classes in the extension
-    for c in root.findall(f'.//element[@{XMI_NS}type="uml:Class"]'):
-        c_id = _get_value(c, attr=f'{XMI_NS}idref')
-        c_name = c.get('name')
-        if c_name is None:
-            continue
-        c_def = ClassDefinition(name=c_name)
-        c_def.class_uri = f'cim:{c_name}'    # TODO: add namespace to output!
-        c_def.description = _get_value(c, 'properties', 'documentation')
-        # c_def.is_a is replaced as part of processing the packagedElements
-        is_a = _get_value(c, f'.//Generalization[@start="{c_id}"]', 'end')
-        if len(is_a) > 0:
-            c_def.is_a = is_a
-        c_defs[c_id] = c_def
-    log.info(f'Processed [{len(c_defs)}] classes')
-    # Process all attributes in the extension
-    for s in root.findall('.//attribute'):
-        s_name = s.get('name')
-        if s_name is None:
-            continue
-        s_def = SlotDefinition(name=s_name)
-        s_def.description = _get_value(s, 'documentation', 'value')
-        # s_def.range is set as part of processing the packagedElements
-        s_defs[_get_value(s, attr=f'{XMI_NS}idref')] = s_def
-    log.info(f'Processed [{len(s_defs)}] attributes')
-    # TODO: Process all enumerations
-    # TODO: Process all types
+    p_defs, c_defs, s_defs, e_defs = _parse_extension(tree.getroot(), template)
 
     def _is_package(elem, elem_type):
         return elem.tag == 'packagedElement' and elem_type == 'uml:Package'
@@ -298,6 +339,11 @@ def testxmi(xmifile, template, **kwargs):
                     c_def.is_a = c_defs[c_def.is_a].name
                 p_def.add_class(c_def)
 
+            # --- Enumeration -------------------------------------------------
+
+            if _is_enumeration(elem,  elem_type):
+                pass
+
             # --- Slot --------------------------------------------------------
 
             if _is_attribute(elem, elem_type):
@@ -310,9 +356,16 @@ def testxmi(xmifile, template, **kwargs):
                 s_def.slot_uri = f'cim:{c_def.name}.{s_def.name}'
                 # Set s_def.range
                 r_id = _get_value(elem, 'type', attr=f'{XMI_NS}idref')
-                log.info(r_id)
                 if len(r_id) > 0 and r_id in c_defs:
+                    # range is a class
                     s_def.range = c_defs[r_id].name
+                    if c_defs[r_id].name not in p_def.all_classes():
+                        p_def.add_class(c_defs[r_id])
+                if len(r_id) > 0 and r_id in e_defs:
+                    # range is an enumeration
+                    s_def.range = e_defs[r_id].name
+                    if e_defs[r_id].name not in p_def.all_enums():
+                        p_def.add_enum(e_defs[r_id])
                 # Cardinality
                 lv = _get_value(elem, 'lowerValue', 'value')
                 uv = _get_value(elem, 'upperValue', 'value')
@@ -332,5 +385,3 @@ def testxmi(xmifile, template, **kwargs):
 
     # print(c_defs['EAID_EEB4990E_A0CF_4f4b_981C_2A2C774153BC'])
     print(packages['Model/TC57CIM/IEC61970/Base/Wires'].serialize())
-
-    #log.info(f'Processed [{len(c_defs)}] classes in [{len(packages)}] packages')
