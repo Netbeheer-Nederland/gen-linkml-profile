@@ -160,8 +160,12 @@ def profile(yamlfile, class_name, data_product, skip_opt, fix_doc, **kwargs):
                 log.debug(f'Processing ancestor "{c_name}" for "{elem.name}"')
                 _profile(view, c_name, builder, skip_opt, keep, fix_doc)
             for s_name, s_def in elem['attributes'].items():
+                if fix_doc and s_def.description is not None:
+                    s_def.description = ' '.join(split('\s+', s_def.description))
                 if skip_opt:
-                    if not s_def.required and view.get_class(s_def.range):
+                    r_name = s_def.range
+                    required = r_name not in keep and view.get_class(r_name)
+                    if not s_def.required and required:
                         # Set range to a native type, replacing the class
                         log.info(f'Replacing range "{s_def.range}"')
                         s_def.range = TYPE_REPLACED_BY_PROFILER
