@@ -1,24 +1,16 @@
 # -*- coding: utf-8 -*-
 
 from click import option, group, argument, File
-from xml.etree import ElementTree
-from xml.etree.ElementTree import XMLPullParser
-from collections import deque
-from enum import Enum
-
 from dataclasses import dataclass
+from re import split
+
 from linkml.utils.schema_builder import SchemaBuilder
-from linkml.utils.schemaloader import SchemaLoader
 from linkml_runtime.utils.schemaview import SchemaView
 from linkml_runtime.utils.schema_as_dict import schema_as_yaml_dump
-
 from linkml_runtime.linkml_model.meta import (ClassDefinition,
                                               SlotDefinition,
                                               EnumDefinition,
                                               TypeDefinition)
-
-from pprint import pprint
-
 import logging
 log = logging.getLogger(__name__)
 
@@ -92,6 +84,19 @@ def cli(log, debug):
 
 
 @cli.command()
+@option('--schema', '-s', required=True, multiple=True,
+        help='Schema to merge into yamlfile')
+@option('--clobber', is_flag=True, help='Overwrite existing elements')
+@argument('yamlfile')
+def merge(yamlfile, schema, clobber):
+    """ """
+    view = SchemaView(yamlfile, merge_imports=False)
+    for s in schema:
+        view.merge_schema(SchemaView(s, merge_imports=False).schema, clobber)
+    print(schema_as_yaml_dump(view.schema))
+
+
+@cli.command()
 @option('--class-name', '-c', required=True, multiple=True,
         help='Class to profile')
 @option('--data-product', is_flag=True,
@@ -119,16 +124,27 @@ def profile(yamlfile, class_name, data_product, **kwargs):
 
     def _profile(view, name, builder):
         """ """
-        elem = view.get_element(name)
+        elem = view.get_element(name, imports=False)
         if elem is None:
             return
+        # Fix documentation
+        if elem.description is not None:
+            # Clean up description
+            elem.description = ' '.join(split('\s+', elem.description))
         if isinstance(elem, ClassDefinition):
             if builder.has_class(elem.name):
                 return
             log.info(f'Adding class "{name}"')
             builder.add_class(elem)
+            for c_name in view.class_ancestors(elem.name):
+                if elem.name == c_name or builder.has_class(c_name):
+                    continue
+                # Process inheritance (is_a) for this class
+                log.debug(f'Processing ancestor "{c_name}" for "{elem.name}"')
+                _profile(view, c_name, builder)
             for s_name, s_def in elem['attributes'].items():
-                log.debug(f'Slot "{c_name}::{s_name}" found')
+                # Process ranges
+                log.debug(f'Slot "{s_name}" found')
                 _profile(view, s_def.range, builder)
         if isinstance(elem, TypeDefinition):
             if builder.has_type(elem.name):
