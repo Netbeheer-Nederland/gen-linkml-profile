@@ -90,7 +90,9 @@ def cli(log, debug):
 @option('--clobber', is_flag=True, help='Overwrite existing elements')
 @argument('yamlfile')
 def merge(yamlfile, schema, clobber):
-    """ """
+    """Merge one or more schemas into the target schema. Existing elements
+    can be overwritten or retained.
+    """
     view = SchemaView(yamlfile, merge_imports=False)
     for s in schema:
         view.merge_schema(SchemaView(s, merge_imports=False).schema, clobber)
@@ -99,7 +101,7 @@ def merge(yamlfile, schema, clobber):
 
 @cli.command()
 @option('--class-name', '-c', required=True, multiple=True,
-        help='Class to profile')
+        help='Class(es) to profile')
 @option('--data-product', is_flag=True,
         help='Generate the logical model for a data product')
 @option('--skip-opt', is_flag=True,
@@ -110,10 +112,6 @@ def merge(yamlfile, schema, clobber):
 def profile(yamlfile, class_name, data_product, skip_opt, fix_doc, **kwargs):
     """Create a new LinkML schema based on the provided class name(s) and their
     dependencies.
-
-    :yamlfile: base schema
-    :class_name: tuple of class names to keep in the schema
-    :data_product: if True, create the logical model for a single class name
     """
     view = SchemaView(yamlfile, merge_imports=False)
     c, t, e = len(view.all_classes()), len(view.all_types()), len(view.all_enums())
