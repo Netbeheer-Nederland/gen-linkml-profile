@@ -39,5 +39,5 @@ Options:
 
 ## Development
 
-Clone the repository and run ```poetry install``` in the gen-linkml-profiler```
+Clone the repository and run ```poetry install``` in the ```gen-linkml-profiler```
 directory.
