@@ -118,6 +118,8 @@ def profile(yamlfile, class_name, data_product, skip_opt, fix_doc, **kwargs):
     log.info(f'Schema contains [{c}] classes, [{t}] types and [{e}] enums')
     builder = ProfilingSchemaBuilder(id=view.schema.id,
                                      name=view.schema.name).add_defaults()
+    builder.schema.title = view.schema.title
+    builder.schema.description = view.schema.description
     # Fix default prefix
     builder.schema.default_prefix = 'this'
     if 'this' not in view.namespaces():
