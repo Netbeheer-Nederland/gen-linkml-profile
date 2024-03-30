@@ -9,6 +9,7 @@ readme = "README.md"
 python = "^3.10"
 linkml = "^1.7.5"
 click = "^8.1.7"
+treelib = "^1.7.0"
 
 [tool.poetry.scripts]
 gen-linkml-profile = "gen_linkml_profile.__main__:cli"
