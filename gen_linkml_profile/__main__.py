@@ -68,6 +68,25 @@ class ProfilingSchemaBuilder(SchemaBuilder):
         super().add_enum(e_def)
 
 
+def _create_builder(view):
+    """Create a new Builder object based on the provided view."""
+    builder = ProfilingSchemaBuilder(id=view.schema.id,
+                                     name=view.schema.name).add_defaults()
+    builder.schema.title = view.schema.title
+    builder.schema.description = view.schema.description
+    # Fix default prefix
+    builder.schema.default_prefix = 'this'
+    if 'this' not in view.namespaces():
+        builder.add_prefix('this', view.schema.id)
+    for prefix, ns in view.namespaces().items():
+        # Copy URIs to new schema
+        try:
+            builder.add_prefix(prefix, ns)
+        except ValueError as e:
+            log.debug(e)
+    return builder
+
+
 @group()
 @option('--log', type=File(mode='a'), help='Filename for log file')
 @option('--debug', is_flag=True, default=False, help='Enable debug mode')
@@ -92,9 +111,7 @@ def cli(log, debug):
 @option('--clobber', is_flag=True, help='Overwrite existing elements')
 @argument('yamlfile', type=File('rt'), default=stdin)
 def merge(yamlfile, schema, clobber):
-    """Merge one or more schemas into the target schema. Existing elements
-    can be overwritten or retained.
-    """
+    """Merge one or more schemas into the target schema"""
     view = SchemaView(yamlfile.read(), merge_imports=False)
     for s in schema:
         view.merge_schema(SchemaView(s, merge_imports=False).schema, clobber)
@@ -126,7 +143,49 @@ def children(yamlfile, class_name):
 
 
 @cli.command()
-@option('--out', '-o', type=File('at'), default=stdout,
+@option('--out', '-o', type=File('wt'), default=stdout,
+        help='Output file.  Omit to print schema to stdout')
+@option('--class-name', '-c', required=True, help='Class to profile')
+@argument('yamlfile', type=File('rt'), default=stdin)
+def data_product(yamlfile, out, class_name):
+    """Process a single class as a data product"""
+    view = SchemaView(yamlfile.read(), merge_imports=False)
+    builder = _create_builder(view)
+    # Retrieve class
+    c_def = view.get_class(class_name)
+    if c_def is None:
+        raise ValueError(f'Class "{class_name}" not found in schema')
+    # Flatten class hierarchy
+    c_def = view.induced_class(c_def.name)
+    for s_name, s_def in c_def['attributes'].items():
+        if s_def.range is None:
+            continue
+        # Check if range is a class
+        c_range = view.get_class(s_def.range)
+        if c_range is None:
+            log.debug(f'Range "{s_def.range}" is not a class, skipping')
+            continue
+        # Replace range with type of the identifier for the referred class
+        s_range_def = view.get_identifier_slot(c_range.name, imports=False)
+        if s_range_def is None:
+            log.debug(f'No identifying slot found for "{c_range.name}"')
+        s_range = view.get_slot(s_range_def.name)
+        if s_range is None:
+            log.debug(f'No identifier found for "{c_def.name}::{s_def.name}"')
+            continue
+        log.debug(f'Set range "{s_range.name}" for "{c_def.name}::{s_def.name}"')
+        # TODO: check if the identifying slot range is not another class
+        s_def.range = s_range.range
+    # Clean up class
+    c_def.is_a = None
+    # Generate output
+    log.info(f'Processed class "{c_def.name}" as data product')
+    builder.add_class(c_def)
+    echo(schema_as_yaml_dump(builder.schema), file=out)
+
+
+@cli.command()
+@option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
 @option('--class-name', '-c', required=True, multiple=True,
         help='Class(es) to profile')
@@ -135,28 +194,14 @@ def children(yamlfile, class_name):
 @option('--fix-doc', is_flag=True,
         help='Normalise documentation by removing newlines')
 @argument('yamlfile', type=File('rt'), default=stdin)
-def profile(yamlfile, out, class_name, data_product, skip_opt, fix_doc,
-            **kwargs):
+def profile(yamlfile, out, class_name, skip_opt, fix_doc, **kwargs):
     """Create a new LinkML schema based on the provided class name(s) and their
     dependencies.
     """
     view = SchemaView(yamlfile.read(), merge_imports=False)
     c, t, e = len(view.all_classes()), len(view.all_types()), len(view.all_enums())
     log.info(f'Schema contains [{c}] classes, [{t}] types and [{e}] enums')
-    builder = ProfilingSchemaBuilder(id=view.schema.id,
-                                     name=view.schema.name).add_defaults()
-    builder.schema.title = view.schema.title
-    builder.schema.description = view.schema.description
-    # Fix default prefix
-    builder.schema.default_prefix = 'this'
-    if 'this' not in view.namespaces():
-        builder.add_prefix('this', view.schema.id)
-    for prefix, ns in view.namespaces().items():
-        # Copy URIs to new schema
-        try:
-            builder.add_prefix(prefix, ns)
-        except ValueError as e:
-            log.debug(e)
+    builder = _create_builder(view)
     # Add a type to identify removed ranges
     if skip_opt:
         t_replaced = TypeDefinition(
@@ -189,7 +234,7 @@ def profile(yamlfile, out, class_name, data_product, skip_opt, fix_doc,
                 _profile(view, c_name, builder, skip_opt, keep, fix_doc)
             for s_name, s_def in elem['attributes'].items():
                 if fix_doc and s_def.description is not None:
-                    # TODO: slot description is not actually updated
+                    # FIXME: slot description is not actually updated
                     log.debug(f'Fixing doc for slot "{elem.name}::{s_def.name}"')
                     s_def.description = ' '.join(split('\s+', s_def.description))
                 if skip_opt:
@@ -224,5 +269,4 @@ def profile(yamlfile, out, class_name, data_product, skip_opt, fix_doc,
         _profile(view, c_name, builder, skip_opt, ancestors, fix_doc)
     builder.stats()
     # Write schema to stdout
-    # print(schema_as_yaml_dump(builder.schema))
     echo(schema_as_yaml_dump(builder.schema), file=out)

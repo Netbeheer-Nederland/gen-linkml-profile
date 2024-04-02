@@ -23,17 +23,18 @@ Install ```gen-linkml-profiler``` using a package manager like ```pipx```
 directly from this GitHub repository.
 
 ```
-Usage: gen-linkml-profile profile [OPTIONS] YAMLFILE
-
-  Create a new LinkML schema based on the provided class name(s) and their
-  dependencies.
+Usage: gen-linkml-profile [OPTIONS] COMMAND [ARGS]...
 
 Options:
-  -c, --class-name TEXT  Class(es) to profile  [required]
-  --skip-opt             Do not process any ranges that are on an optional
-                         slot
-  --fix-doc              Normalise documentation by removing newlines
-  --help                 Show this message and exit.
+  --log FILENAME  Filename for log file
+  --debug         Enable debug mode
+  --help          Show this message and exit.
+
+Commands:
+  children      Show all children for the class in a hierarchical view.
+  data-product  Process a single class as a data product
+  merge         Merge one or more schemas into the target schema
+  profile       Create a new LinkML schema based on the provided class...
 ```
 
 ## Development
