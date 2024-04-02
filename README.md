@@ -30,7 +30,6 @@ Usage: gen-linkml-profile profile [OPTIONS] YAMLFILE
 
 Options:
   -c, --class-name TEXT  Class(es) to profile  [required]
-  --data-product         Generate the logical model for a data product
   --skip-opt             Do not process any ranges that are on an optional
                          slot
   --fix-doc              Normalise documentation by removing newlines
