@@ -130,8 +130,6 @@ def children(yamlfile, class_name):
         help='Output file.  Omit to print schema to stdout')
 @option('--class-name', '-c', required=True, multiple=True,
         help='Class(es) to profile')
-@option('--data-product', is_flag=True,
-        help='Generate the logical model for a data product')
 @option('--skip-opt', is_flag=True,
         help='Do not process any ranges that are on an optional slot')
 @option('--fix-doc', is_flag=True,
