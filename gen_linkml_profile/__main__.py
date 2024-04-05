@@ -106,16 +106,19 @@ def cli(log, debug):
 
 
 @cli.command()
-@option('--schema', '-s', required=True, multiple=True,
+@option('--schema', '-s', type=File('rt'), required=True, default=stdin,
         help='Schema to merge into yamlfile')
+@option('--out', '-o', type=File('wt'), default=stdout,
+        help='Output file.  Omit to print schema to stdout')
 @option('--clobber', is_flag=True, help='Overwrite existing elements')
 @argument('yamlfile', type=File('rt'), default=stdin)
-def merge(yamlfile, schema, clobber):
+def merge(yamlfile, schema, out, clobber):
     """Merge one or more schemas into the target schema"""
     view = SchemaView(yamlfile.read(), merge_imports=False)
-    for s in schema:
-        view.merge_schema(SchemaView(s, merge_imports=False).schema, clobber)
-    print(schema_as_yaml_dump(view.schema))
+    view.merge_schema(SchemaView(schema.read(), merge_imports=False).schema,
+                      clobber)
+    # Output
+    echo(schema_as_yaml_dump(view.schema), file=out)
 
 
 @cli.command()
@@ -168,7 +171,8 @@ def data_product(yamlfile, out, class_name):
         # Replace range with type of the identifier for the referred class
         s_range_def = view.get_identifier_slot(c_range.name, imports=False)
         if s_range_def is None:
-            log.debug(f'No identifying slot found for "{c_range.name}"')
+            log.error(f'No identifying slot found for "{c_range.name}"')
+            continue
         s_range = view.get_slot(s_range_def.name)
         if s_range is None:
             log.debug(f'No identifier found for "{c_def.name}::{s_def.name}"')
