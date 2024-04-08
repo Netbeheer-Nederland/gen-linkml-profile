@@ -250,6 +250,16 @@ def profile(yamlfile, out, class_name, skip_opt, fix_doc, **kwargs):
                         description='Range was replaced by the profiler')
         builder.add_type(t_replaced)
 
+    def _slot(s_name, s_def, skip_opt):
+        """Process a SlotDefinition"""
+        if skip_opt:
+            r_name = s_def.range
+            required = r_name not in keep and view.get_class(r_name)
+            if not s_def.required and required:
+                # Set range to a native type, replacing the class
+                log.debug(f'Replacing optional range "{s_def.range}"')
+                s_def.range = TYPE_REPLACED_BY_PROFILER
+
     def _profile(view, name, builder, skip_opt, keep, fix_doc=False):
         """ """
         elem = view.get_element(name, imports=False)
@@ -271,21 +281,13 @@ def profile(yamlfile, out, class_name, skip_opt, fix_doc, **kwargs):
                 # Process inheritance (is_a) for this class
                 log.debug(f'Processing ancestor "{c_name}" for "{elem.name}"')
                 _profile(view, c_name, builder, skip_opt, keep, fix_doc)
+            for s_name in elem['slots']:
+                s_def = view.get_slot(s_name)
+                builder.add_slot(s_def)
+                _slot(s_name, s_def, skip_opt)
+                _profile(view, s_def.range, builder, skip_opt, keep, fix_doc)
             for s_name, s_def in elem['attributes'].items():
-                if fix_doc and s_def.description is not None:
-                    # FIXME: slot description is not actually updated
-                    log.debug(f'Fixing doc for slot "{elem.name}::{s_def.name}"')
-                    s_def.description = ' '.join(split('\s+', s_def.description))
-                if skip_opt:
-                    r_name = s_def.range
-                    required = r_name not in keep and view.get_class(r_name)
-                    if not s_def.required and required:
-                        # Set range to a native type, replacing the class
-                        log.debug(f'Replacing optional range "{elem.name}::{s_def.range}"')
-                        s_def.range = TYPE_REPLACED_BY_PROFILER
-                        continue
-                # Process ranges
-                log.debug(f'Slot "{s_name}" found')
+                _slot(s_name, s_def, skip_opt)
                 _profile(view, s_def.range, builder, skip_opt, keep, fix_doc)
         if isinstance(elem, TypeDefinition):
             if builder.has_type(elem.name):
@@ -297,15 +299,15 @@ def profile(yamlfile, out, class_name, skip_opt, fix_doc, **kwargs):
                 return
             log.debug(f'Adding enum "{name}"')
             builder.add_enum(elem)
+        # TODO: How to handle mixins?
+        # TODO: How to handle specific instructions likee emit_prefixes?
 
-    ancestors = set()
+    keep = set()
     for c_name in class_name:
         try:
-            ancestors |= set(view.class_ancestors(c_name))
+            _profile(view, c_name, builder, skip_opt, keep, fix_doc)
         except ValueError as e:
             log.warning(e)
-    for c_name in ancestors:
-        _profile(view, c_name, builder, skip_opt, ancestors, fix_doc)
     builder.stats()
     # Write schema to stdout
     echo(schema_as_yaml_dump(builder.schema), file=out)
