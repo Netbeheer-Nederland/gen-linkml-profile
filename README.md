@@ -35,6 +35,7 @@ Commands:
   data-product  Process a single class as a data product
   merge         Merge one or more schemas into the target schema
   profile       Create a new LinkML schema based on the provided class...
+  pydantic      Pre-process the schema for use by gen-pydantic
 ```
 
 ## Development
