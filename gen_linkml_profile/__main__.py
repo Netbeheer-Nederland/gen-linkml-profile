@@ -127,7 +127,7 @@ def merge(yamlfile, schema, out, clobber):
         help='Root of class hierarchy')
 @argument('yamlfile', type=File('rt'), default=stdin)
 def children(yamlfile, class_name):
-    """Show all children for the class in a hierarchical view."""
+    """Show all children for the class in a hierarchical view"""
     view = SchemaView(yamlfile.read(), merge_imports=False)
 
     def _nodes(c_name, tree, parent=None):
