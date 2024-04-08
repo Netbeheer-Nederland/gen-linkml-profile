@@ -7,6 +7,7 @@ from sys import stdin, stdout
 
 from treelib import Tree, Node
 from linkml.utils.schema_builder import SchemaBuilder
+from linkml.utils.helpers import convert_to_snake_case
 from linkml_runtime.utils.schemaview import SchemaView, OrderedBy
 from linkml_runtime.utils.schema_as_dict import schema_as_yaml_dump
 from linkml_runtime.linkml_model.meta import (ClassDefinition,
@@ -142,7 +143,41 @@ def children(yamlfile, class_name):
     for c_name in class_names:
         tree = Tree()
         _nodes(c_name, tree)
-        print('\n' + tree.show(stdout=False))
+        echo('\n' + tree.show(stdout=False))
+
+
+@cli.command()
+@option('--attr', '-a', type=(str, str), multiple=True,
+        help='Manual mapping values. Use --attr [source] [target]')
+@option('--out', '-o', type=File('wt'), default=stdout,
+        help='Output file.  Omit to print schema to stdout')
+@argument('yamlfile', type=File('rt'), default=stdin)
+def pydantic(yamlfile, attr, out):
+    """Pre-process the schema for use by gen-pydantic"""
+    def _snake_case(s):
+        # return ''.join('_' + c if c.isupper() else c for c in s).strip()
+        return convert_to_snake_case(s)
+    view = SchemaView(yamlfile.read(), merge_imports=False)
+    attr = dict(attr)
+    log.info(f'Processing [{len(view.schema.classes)}] classes')
+    for c_name, c_def in view.schema.classes.items():
+        # Process classes in the schema, not a copy of c_def through SchemaView
+        if 'attributes' not in c_def:
+            continue
+        # Convert attributes to snake_case
+        attributes = {}
+        for s_name, s_def in c_def['attributes'].items():
+            if s_name in attr:
+                snake_case = attr[s_name]
+                log.info(f'Processing "{c_name}::{s_name}" as "{snake_case}"')
+            else:
+                snake_case = _snake_case(s_name)
+            log.debug(f'Processing "{c_name}::{s_name}" as "{snake_case}"')
+            # Replace reference
+            attributes[snake_case] = s_def
+        view.schema.classes[c_name]['attributes'] = attributes
+    view.set_modified()
+    echo(schema_as_yaml_dump(view.schema), file=out)
 
 
 @cli.command()
