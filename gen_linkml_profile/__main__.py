@@ -24,49 +24,22 @@ TYPE_REPLACED_BY_PROFILER = 'replaced_by_profiler'
 @dataclass
 class ProfilingSchemaBuilder(SchemaBuilder):
     """ """
-    def __post_init__(self):
-        super().__post_init__()
-        self.c_names, self.s_names, self.e_names, self.t_names = {}, {}, {}, {}
-
     def stats(self):
-        c, t, e = len(self.c_names), len(self.t_names), len(self.e_names)
+        c, t, e = (len(self.schema.classes), len(self.schema.types),
+                   len(self.schema.enums))
         log.info(f'Profiled [{c}] classes, [{t}] types and [{e}] enums')
 
     def has_class(self, c_name):
-        return c_name in self.c_names
+        return c_name in self.schema.classes
 
     def has_slot(self, s_name):
-        return s_name in self.s_names
+        return s_name in self.schema.slots
 
     def has_type(self, t_name):
-        return t_name in self.t_names
+        return t_name in self.schema.types
 
     def has_enum(self, e_name):
-        return e_name in self.e_names
-
-    def add_class(self, c_def):
-        if c_def.name in self.c_names:
-            return
-        self.c_names[c_def.name] = c_def
-        super().add_class(c_def)
-
-    def add_slot(self, s_def):
-        if s_def.name in self.s_names:
-            return
-        self.s_names[s_def.name] = s_def
-        super().add_slot(s_def)
-
-    def add_type(self, t_def):
-        if t_def.name in self.t_names:
-            return
-        self.t_names[t_def.name] = t_def
-        super().add_type(t_def)
-
-    def add_enum(self, e_def):
-        if e_def.name in self.e_names:
-            return
-        self.e_names[e_def.name] = e_def
-        super().add_enum(e_def)
+        return e_name in self.schema.enums
 
 
 def _create_builder(view):
@@ -237,6 +210,7 @@ def profile(yamlfile, out, class_name, skip_opt, fix_doc, **kwargs):
     """Create a new LinkML schema based on the provided class name(s) and their
     dependencies.
     """
+    # TODO: Replace SchemaView with SchemaDefinition to prevent magic behaviour
     view = SchemaView(yamlfile.read(), merge_imports=False)
     c, t, e = len(view.all_classes()), len(view.all_types()), len(view.all_enums())
     log.info(f'Schema contains [{c}] classes, [{t}] types and [{e}] enums')
@@ -282,6 +256,8 @@ def profile(yamlfile, out, class_name, skip_opt, fix_doc, **kwargs):
                 log.debug(f'Processing ancestor "{c_name}" for "{elem.name}"')
                 _profile(view, c_name, builder, skip_opt, keep, fix_doc)
             for s_name in elem['slots']:
+                if builder.has_slot(s_name):
+                    continue
                 s_def = view.get_slot(s_name)
                 builder.add_slot(s_def)
                 _slot(s_name, s_def, skip_opt)
