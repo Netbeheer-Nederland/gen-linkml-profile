@@ -22,7 +22,7 @@ class ProfilingSchemaBuilder(SchemaBuilder):
     def stats(self):
         c, t, e = (len(self.schema.classes), len(self.schema.types),
                    len(self.schema.enums))
-        log.info(f'Profiled [{c}] classes, [{t}] types and [{e}] enums')
+        log.info(f'Profiling [{c}] classes, [{t}] types and [{e}] enums')
 
     def has_class(self, c_name):
         return c_name in self.schema.classes
@@ -38,7 +38,7 @@ class ProfilingSchemaBuilder(SchemaBuilder):
 
 
 class SchemaProfiler(object):
-    """ """
+    """Helper class to profile LinkML schemas."""
     def __init__(self, view, c_names=None):
         self.view = view
         self.c_names = c_names if c_names is not None else []
@@ -65,7 +65,7 @@ class SchemaProfiler(object):
         return builder
 
     def _slot(self, s_name, s_def, skip_opt):
-        """Process a SlotDefinition"""
+        """Process a SlotDefinition."""
         if not skip_opt:
             return
         r_name = s_def.range
@@ -76,7 +76,7 @@ class SchemaProfiler(object):
             s_def.range = TYPE_REPLACED_BY_PROFILER
 
     def _profile(self, name, builder, skip_opt, fix_doc=False):
-        """Profile schema elements recursively"""
+        """Profile schema elements recursively."""
         elem = self.view.get_element(name, imports=False)
         if elem is None:
             return
@@ -116,11 +116,11 @@ class SchemaProfiler(object):
                 return
             log.debug(f'Adding enum "{name}"')
             builder.add_enum(elem)
-        # TODO: How to handle mixins?
-        # TODO: How to handle specific instructions likee emit_prefixes?
 
     def profile(self, skip_opt=False, fix_doc=False):
-        """ """
+        """Create a new LinkML schema based on the provided class name(s) and
+        their dependencies.
+        """
         # TODO: Replace SchemaView with SchemaDefinition to prevent magic behaviour
         builder = self._create_builder()
         # Add a type to identify removed ranges
@@ -134,6 +134,8 @@ class SchemaProfiler(object):
 
         for c_name in self.c_names:
             try:
+                if c_name not in self.view.all_classes():
+                    log.warning(f'No class with name "{c_name}" found')
                 self._profile(c_name, builder, skip_opt, fix_doc)
             except ValueError as e:
                 log.warning(e)
@@ -145,7 +147,7 @@ class SchemaProfiler(object):
         return convert_to_snake_case(s)
 
     def pydantic(self, attr):
-        """ """
+        """Pre-process the schema for use by gen-pydantic."""
         for c_name, c_def in self.view.schema.classes.items():
             # Process classes in the schema, not a copy of c_def through SchemaView
             if 'attributes' not in c_def:
@@ -166,7 +168,7 @@ class SchemaProfiler(object):
         return self.view.schema
 
     def data_product(self, class_name):
-        """ """
+        """Process a single class as a data product."""
         builder = self._create_builder()
         # Retrieve class
         c_def = self.view.get_class(class_name)

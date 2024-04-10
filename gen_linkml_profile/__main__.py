@@ -56,6 +56,9 @@ def merge(yamlfile, schema, out, clobber):
 def children(yamlfile, class_name):
     """Show all children for the class in a hierarchical view"""
     view = SchemaView(yamlfile.read(), merge_imports=False)
+    c, t, e = (len(view.all_classes()), len(view.all_types()),
+               len(view.all_enums()))
+    log.info(f'Profiling [{c}] classes, [{t}] types and [{e}] enums')
 
     def _nodes(c_name, tree, parent=None):
         if c_name in tree:
