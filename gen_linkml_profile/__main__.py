@@ -104,16 +104,13 @@ def data_product(yamlfile, out, class_name):
         help='Output file.  Omit to print schema to stdout')
 @option('--class-name', '-c', required=True, multiple=True,
         help='Class(es) to profile')
-@option('--skip-opt', is_flag=True,
-        help='Do not process any ranges that are on an optional slot')
 @option('--fix-doc', is_flag=True,
         help='Normalise documentation by removing newlines')
 @argument('yamlfile', type=File('rt'), default=stdin)
-def profile(yamlfile, out, class_name, skip_opt, fix_doc, **kwargs):
+def profile(yamlfile, out, class_name, fix_doc):
     """Create a new LinkML schema based on the provided class name(s) and their
     dependencies.
     """
     profiler = SchemaProfiler(SchemaView(yamlfile.read(), merge_imports=False),
                               class_name)
-    echo(schema_as_yaml_dump(profiler.profile(skip_opt=skip_opt,
-         fix_doc=fix_doc)), file=out)
+    echo(schema_as_yaml_dump(profiler.profile(fix_doc=fix_doc)), file=out)
