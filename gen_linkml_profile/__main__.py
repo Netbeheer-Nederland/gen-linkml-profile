@@ -6,8 +6,11 @@ from sys import stdin, stdout
 from .schema_profiler import SchemaProfiler
 
 from treelib import Tree, Node
+from linkml.generators.owlgen import OwlSchemaGenerator
 from linkml_runtime.utils.schemaview import SchemaView
 from linkml_runtime.utils.schema_as_dict import schema_as_yaml_dump
+
+from rdflib import Graph
 
 import logging
 log = logging.getLogger(__name__)
@@ -97,6 +100,21 @@ def data_product(yamlfile, out, class_name):
     """Process a single class as a data product"""
     profiler = SchemaProfiler(SchemaView(yamlfile.read(), merge_imports=False))
     echo(schema_as_yaml_dump(profiler.data_product(class_name)), file=out)
+
+
+@cli.command()
+@option('--out', '-o', type=File('wt'), default=stdout,
+        help='Output file.  Omit to print schema to stdout')
+@argument('yamlfile', type=File('rt'), default=stdin)
+def export(yamlfile, out, **kwargs):
+    """ """
+    gen = OwlSchemaGenerator(yamlfile.read(), **kwargs)
+    ttl = gen.serialize(**kwargs)
+    # Convert TTL to RDF/XML
+    g = Graph()
+    g.parse(data=ttl)
+    # Output
+    echo(g.serialize(format='pretty-xml'), file=out)
 
 
 @cli.command()
