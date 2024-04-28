@@ -90,6 +90,7 @@ class SchemaProfiler(object):
         if isinstance(elem, ClassDefinition):
             if builder.has_class(elem.name):
                 return
+            log.info('{s:-^80}'.format(s=f' {elem.name} '))
             log.debug(f'Adding class "{name}"')
             builder.add_class(elem)
             # Find all classes that have a slot with range equal to this class
@@ -108,11 +109,14 @@ class SchemaProfiler(object):
                 is_class = True if self.view.get_class(r_name) else False
                 if is_class and r_name not in self.c_names:
                     opt = 'REQUIRED' if s_def.required else 'optional'
-                    log.info(f'Skipping {opt} slot "{elem.name}::{s_name}" with range: "{r_name}"')
+                    log.warning(f'Skipping {opt} slot "{elem.name}::{s_name}" with range: "{r_name}"')
                     continue
                 attr[s_name] = s_def
-                self._profile(s_def.range, builder, fix_doc)
+                # self._profile(s_def.range, builder, fix_doc)
             elem['attributes'] = attr
+            for s_def in attr.values():
+                # Process each attribute separately to simplify logging
+                self._profile(s_def.range, builder, fix_doc)
         if isinstance(elem, SlotDefinition):
             # Process slots recursively
             pass
@@ -139,6 +143,7 @@ class SchemaProfiler(object):
                 self._profile(c_name, builder, fix_doc)
             except ValueError as e:
                 log.warning(e)
+        log.info('{s:-^80}'.format(s=' Statistics '))
         builder.stats()
         return builder.schema
 
