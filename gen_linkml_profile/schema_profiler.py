@@ -92,6 +92,11 @@ class SchemaProfiler(object):
                 return
             log.debug(f'Adding class "{name}"')
             builder.add_class(elem)
+            # Find all classes that have a slot with range equal to this class
+            for c_def in self.view.all_classes().values():
+                for s_def in c_def.attributes.values():
+                    if s_def.range == elem.name and c_def.name not in self.c_names:
+                        log.info(f'Class "{elem.name}" is used as range for slot "{c_def.name}::{s_def.name}"')
             # TODO: Call _profile() for each SlotDefinition
             attr = {}
             for s_name, s_def in elem['attributes'].items():
