@@ -2,11 +2,19 @@
 
 from dataclasses import dataclass
 from re import split
+from yaml import load, CBaseLoader
+from copy import deepcopy
 
 from linkml.utils.schema_builder import SchemaBuilder
 from linkml.utils.helpers import convert_to_snake_case
 
-from linkml_runtime.utils.schemaview import SchemaView, load_schema_wrap
+from linkml_runtime.utils.schemaview import (SchemaView,
+                                             load_schema_wrap,
+                                             SLOTS,
+                                             CLASSES,
+                                             ENUMS,
+                                             SUBSETS,
+                                             TYPES)
 from linkml_runtime.linkml_model.meta import (ClassDefinition,
                                               SlotDefinition,
                                               EnumDefinition,
@@ -39,8 +47,14 @@ class ProfilingSchemaBuilder(SchemaBuilder):
 
 class SchemaProfiler(object):
     """Helper class to profile LinkML schemas."""
-    def __init__(self, view, c_names=None):
-        self.view = view
+    def __init__(self, yamlfile, c_names=None):
+        # Load SchemaDefinition from YAML file, to copy from
+        from linkml_runtime.loaders.yaml_loader import YAMLLoader
+        yaml_loader = YAMLLoader()
+        schema: SchemaDefinition
+        self.schema = yaml_loader.load_any(yamlfile, target_class=SchemaDefinition)
+        # Create a SchemaView to use as wrapper for querying the schema
+        self.view = SchemaView(deepcopy(self.schema), merge_imports=False)
         self.c_names = []
         c_names = c_names if c_names is not None else []
         for c_name in c_names:
@@ -58,20 +72,18 @@ class SchemaProfiler(object):
 
     def _create_builder(self):
         """Create a new Builder object based on the provided view."""
-        builder = ProfilingSchemaBuilder(id=self.view.schema.id,
-                                         name=self.view.schema.name).add_defaults()
-        builder.schema.title = self.view.schema.title
-        builder.schema.description = self.view.schema.description
-        # Fix default prefix
-        builder.schema.default_prefix = 'this'
-        if 'this' not in self.view.namespaces():
-            builder.add_prefix('this', self.view.schema.id)
-        for prefix, ns in self.view.namespaces().items():
-            # Copy URIs to new schema
-            try:
-                builder.add_prefix(prefix, ns)
-            except ValueError as e:
-                log.debug(e)
+        builder = ProfilingSchemaBuilder(id=self.schema.id,
+                                         name=self.schema.name)
+        builder.schema.title = self.schema.title
+        builder.schema.description = self.schema.description
+        # Imports & CURI maps
+        builder.schema.imports = self.schema.imports
+        builder.schema.default_prefix = self.schema.default_prefix
+        builder.schema.default_range = self.schema.default_range
+        builder.schema.default_curi_maps = self.schema.default_curi_maps
+        # Add namespaces for URIs
+        for prefix in self.schema.prefixes.values():
+            builder.add_prefix(prefix.prefix_prefix, prefix.prefix_reference)
         return builder
 
     def _range_is_class(self, s_def):
@@ -88,13 +100,14 @@ class SchemaProfiler(object):
                 return
             log.info('{s:-^80}'.format(s=f' {elem.name} '))
             log.debug(f'Adding class "{name}"')
+            # Use the class from the SchemaDefinition, _not_ the SchemaView
+            elem = self.schema[CLASSES][elem.name]
             builder.add_class(elem)
             # Find all classes that have a slot with range equal to this class
             for c_def in self.view.all_classes().values():
                 for s_def in c_def.attributes.values():
                     if s_def.range == elem.name and c_def.name not in self.c_names:
                         log.info(f'Class "{elem.name}" is used as range for slot "{c_def.name}::{s_def.name}"')
-            # TODO: Call _profile() for each SlotDefinition
             attr = {}
             for s_name, s_def in elem['attributes'].items():
                 r_name = s_def.range
@@ -148,7 +161,7 @@ class SchemaProfiler(object):
 
     def pydantic(self, attr, fix_doc):
         """Pre-process the schema for use by gen-pydantic."""
-        for c_name, c_def in self.view.schema.classes.items():
+        for c_name, c_def in self.schema[CLASSES].items():
             # Process classes in the schema, not a copy of c_def through SchemaView
             if 'attributes' not in c_def:
                 continue
@@ -170,9 +183,8 @@ class SchemaProfiler(object):
                     s_def.description = ' '.join(split('\s+', s_def.description))
                 # Replace reference
                 attributes[snake_case] = s_def
-            self.view.schema.classes[c_name]['attributes'] = attributes
-        self.view.set_modified()
-        return self.view.schema
+            self.schema.classes[c_name]['attributes'] = attributes
+        return self.schema
 
     def data_product(self, class_name):
         """Process a single class as a data product."""

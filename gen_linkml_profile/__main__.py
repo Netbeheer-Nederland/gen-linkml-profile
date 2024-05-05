@@ -7,8 +7,8 @@ from .schema_profiler import SchemaProfiler
 
 from treelib import Tree, Node
 from linkml.generators.owlgen import OwlSchemaGenerator
-from linkml_runtime.utils.schemaview import SchemaView
 from linkml_runtime.utils.schema_as_dict import schema_as_yaml_dump
+from linkml_runtime.utils.schemaview import SchemaView
 
 from rdflib import Graph
 
@@ -141,7 +141,7 @@ def docs(yamlfile, class_name):
 @argument('yamlfile', type=File('rt'), default=stdin)
 def pydantic(yamlfile, attr, out, fix_doc):
     """Pre-process the schema for use by gen-pydantic"""
-    profiler = SchemaProfiler(SchemaView(yamlfile.read(), merge_imports=False))
+    profiler = SchemaProfiler(yamlfile.read())
     echo(schema_as_yaml_dump(profiler.pydantic(dict(attr), fix_doc=fix_doc)),
          file=out)
 
@@ -153,7 +153,7 @@ def pydantic(yamlfile, attr, out, fix_doc):
 @argument('yamlfile', type=File('rt'), default=stdin)
 def data_product(yamlfile, out, class_name):
     """Process a single class as a data product"""
-    profiler = SchemaProfiler(SchemaView(yamlfile.read(), merge_imports=False))
+    profiler = SchemaProfiler(yamlfile.read())
     echo(schema_as_yaml_dump(profiler.data_product(class_name)), file=out)
 
 
@@ -182,5 +182,5 @@ def profile(yamlfile, out, class_name):
     """Create a new LinkML schema based on the provided class name(s) and their
     dependencies.
     """
-    profiler = SchemaProfiler(SchemaView(yamlfile.read()), class_name)
+    profiler = SchemaProfiler(yamlfile.read(), class_name)
     echo(schema_as_yaml_dump(profiler.profile()), file=out)
