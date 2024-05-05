@@ -3,14 +3,15 @@
 from dataclasses import dataclass
 from re import split
 
-from linkml_runtime.utils.schemaview import SchemaView
 from linkml.utils.schema_builder import SchemaBuilder
 from linkml.utils.helpers import convert_to_snake_case
-from linkml_runtime.utils.schemaview import SchemaView
+
+from linkml_runtime.utils.schemaview import SchemaView, load_schema_wrap
 from linkml_runtime.linkml_model.meta import (ClassDefinition,
                                               SlotDefinition,
                                               EnumDefinition,
-                                              TypeDefinition)
+                                              TypeDefinition,
+                                              SchemaDefinition)
 import logging
 log = logging.getLogger(__name__)
 
@@ -77,16 +78,11 @@ class SchemaProfiler(object):
         """ """
         return True if self.view.get_class(s_def.range) else False
 
-    def _profile(self, name, builder, fix_doc=False):
+    def _profile(self, name, builder):
         """Profile schema elements recursively."""
         elem = self.view.get_element(name, imports=False)
         if elem is None:
             return
-        # Fix documentation
-        if fix_doc and elem.description is not None:
-            # Clean up description
-            log.debug(f'Fixing doc for class "{elem.name}"')
-            elem.description = ' '.join(split('\s+', elem.description))
         if isinstance(elem, ClassDefinition):
             if builder.has_class(elem.name):
                 return
@@ -112,11 +108,10 @@ class SchemaProfiler(object):
                     log.warning(f'Skipping {opt} slot "{elem.name}::{s_name}" with range: "{r_name}"')
                     continue
                 attr[s_name] = s_def
-                # self._profile(s_def.range, builder, fix_doc)
             elem['attributes'] = attr
             for s_def in attr.values():
                 # Process each attribute separately to simplify logging
-                self._profile(s_def.range, builder, fix_doc)
+                self._profile(s_def.range, builder)
         if isinstance(elem, SlotDefinition):
             # Process slots recursively
             pass
@@ -131,7 +126,7 @@ class SchemaProfiler(object):
             log.debug(f'Adding enum "{name}"')
             builder.add_enum(elem)
 
-    def profile(self, fix_doc=False):
+    def profile(self):
         """Create a new LinkML schema based on the provided class name(s) and
         their dependencies.
         """
@@ -140,7 +135,7 @@ class SchemaProfiler(object):
         log.info(f'Profiling classes: {", ".join(sorted(self.c_names))}')
         for c_name in self.c_names:
             try:
-                self._profile(c_name, builder, fix_doc)
+                self._profile(c_name, builder)
             except ValueError as e:
                 log.warning(e)
         log.info('{s:-^80}'.format(s=' Statistics '))
@@ -151,12 +146,16 @@ class SchemaProfiler(object):
         # return ''.join('_' + c if c.isupper() else c for c in s).strip()
         return convert_to_snake_case(s)
 
-    def pydantic(self, attr):
+    def pydantic(self, attr, fix_doc):
         """Pre-process the schema for use by gen-pydantic."""
         for c_name, c_def in self.view.schema.classes.items():
             # Process classes in the schema, not a copy of c_def through SchemaView
             if 'attributes' not in c_def:
                 continue
+            # Fix documentation
+            if fix_doc and c_def.description is not None:
+                # Clean up description
+                c_def.description = ' '.join(split('\s+', c_def.description))
             # Convert attributes to snake_case
             attributes = {}
             for s_name, s_def in c_def['attributes'].items():
@@ -165,7 +164,10 @@ class SchemaProfiler(object):
                     log.info(f'Processing "{c_name}::{s_name}" as "{snake_case}"')
                 else:
                     snake_case = self._snake_case(s_name)
-                log.debug(f'Processing "{c_name}::{s_name}" as "{snake_case}"')
+                    log.debug(f'Processing "{c_name}::{s_name}" as "{snake_case}"')
+                if fix_doc and s_def.description is not None:
+                    # Clean up description
+                    s_def.description = ' '.join(split('\s+', s_def.description))
                 # Replace reference
                 attributes[snake_case] = s_def
             self.view.schema.classes[c_name]['attributes'] = attributes

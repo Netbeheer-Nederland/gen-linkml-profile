@@ -11,6 +11,7 @@ linkml = "^1.7.5"
 click = "^8.1.7"
 treelib = "^1.7.0"
 rdflib = "^7.0.0"
+py-markdown-table = "^0.4.0"
 
 [tool.poetry.scripts]
 gen-linkml-profile = "gen_linkml_profile.__main__:cli"

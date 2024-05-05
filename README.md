@@ -31,11 +31,20 @@ Options:
   --help          Show this message and exit.
 
 Commands:
-  children      Show all children for the class in a hierarchical view.
+  children      Show all children for the class in a hierarchical view
   data-product  Process a single class as a data product
+  docs          Generate a documentation table for the class names
+  export        Export an OWL/XML output file.
   merge         Merge one or more schemas into the target schema
   profile       Create a new LinkML schema based on the provided class...
   pydantic      Pre-process the schema for use by gen-pydantic
+```
+
+Most commands that accept a file will also accept input from stdin, allowing
+for piping of output:
+
+```
+$ gen-linkml-profile profile operation.yaml -c Analog -c Discrete|gen-linkml-profile pydantic --fix-doc
 ```
 
 ## Development

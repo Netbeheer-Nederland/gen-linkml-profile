@@ -80,15 +80,70 @@ def children(yamlfile, class_name):
 
 
 @cli.command()
+@option('--class-name', '-c', required=False, multiple=True,
+        help='Root of class hierarchy')
+@argument('yamlfile', type=File('rt'), default=stdin)
+def docs(yamlfile, class_name):
+    """Generate a documentation table for the class names"""
+    view = SchemaView(yamlfile.read(), merge_imports=False)
+    c, t, e = (len(view.all_classes()), len(view.all_types()),
+               len(view.all_enums()))
+    log.info(f'Profiling [{c}] classes, [{t}] types and [{e}] enums')
+
+    from py_markdown_table.markdown_table import markdown_table
+    from re import split
+    rows = []
+    for c_name in class_name:
+        log.info(f'Process class "{c_name}"')
+        c_def = view.induced_class(c_name)
+        if c_def is None:
+            raise ValueError(f'Class "{class_name}" not found in schema')
+        first = True
+        c_description = c_def.description if c_def.description is not None else ''
+        for s_name, s_def in sorted(c_def.attributes.items(), key=lambda x: x[0]):
+            attr = {}
+            req = '1' if s_def.required else '0'
+            mult = '*' if s_def.multivalued else '1'
+            s_description = s_def.description if s_def.description is not None else ''
+            #
+            attr = {'Class Name': c_name if first else '',
+                    'Class Description': c_description if first else '',
+                    'Name': s_name,
+                    'Range': s_def.range,
+                    'Card': f'{req}..{mult}',
+                    'Description': s_description}
+            rows.append(attr)
+            first = False
+    c_name_len = len(max([x['Class Name'] for x in rows], key=len))
+    s_name_len = len(max([x['Name'] for x in rows], key=len))
+    r_name_len = len(max([x['Range'] for x in rows], key=len))
+    echo(markdown_table(rows).set_params(
+         padding_width=0,
+         padding_weight='right',
+         quote=False,
+         multiline_strategy='rows_and_header',
+         multiline={'Class Name': c_name_len if c_name_len > 10 else 10,
+                    'Class Description': 50,
+                    'Name': s_name_len if s_name_len > 4 else 4,
+                    'Range': r_name_len if r_name_len > 5 else 5,
+                    'Card': 4,
+                    'Description': 50}).get_markdown())
+    echo()
+
+
+@cli.command()
 @option('--attr', '-a', type=(str, str), multiple=True,
         help='Manual mapping values. Use --attr [source] [target]')
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
+@option('--fix-doc', is_flag=True,
+        help='Normalise documentation by removing newlines')
 @argument('yamlfile', type=File('rt'), default=stdin)
-def pydantic(yamlfile, attr, out):
+def pydantic(yamlfile, attr, out, fix_doc):
     """Pre-process the schema for use by gen-pydantic"""
     profiler = SchemaProfiler(SchemaView(yamlfile.read(), merge_imports=False))
-    echo(schema_as_yaml_dump(profiler.pydantic(dict(attr))), file=out)
+    echo(schema_as_yaml_dump(profiler.pydantic(dict(attr), fix_doc=fix_doc)),
+         file=out)
 
 
 @cli.command()
@@ -107,7 +162,7 @@ def data_product(yamlfile, out, class_name):
         help='Output file.  Omit to print schema to stdout')
 @argument('yamlfile', type=File('rt'), default=stdin)
 def export(yamlfile, out, **kwargs):
-    """ """
+    """Export an OWL/XML output file. Can be read by SparX EA"""
     gen = OwlSchemaGenerator(yamlfile.read(), **kwargs)
     ttl = gen.serialize(**kwargs)
     # Convert TTL to RDF/XML
@@ -122,13 +177,10 @@ def export(yamlfile, out, **kwargs):
         help='Output file.  Omit to print schema to stdout')
 @option('--class-name', '-c', required=True, multiple=True,
         help='Class(es) to profile')
-@option('--fix-doc', is_flag=True,
-        help='Normalise documentation by removing newlines')
 @argument('yamlfile', type=File('rt'), default=stdin)
-def profile(yamlfile, out, class_name, fix_doc):
+def profile(yamlfile, out, class_name):
     """Create a new LinkML schema based on the provided class name(s) and their
     dependencies.
     """
-    profiler = SchemaProfiler(SchemaView(yamlfile.read(), merge_imports=False),
-                              class_name)
-    echo(schema_as_yaml_dump(profiler.profile(fix_doc=fix_doc)), file=out)
+    profiler = SchemaProfiler(SchemaView(yamlfile.read()), class_name)
+    echo(schema_as_yaml_dump(profiler.profile()), file=out)
