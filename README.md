@@ -11,11 +11,11 @@ Enumerations and types are retrieved as well.  Namespaces and prefixes are
 copied likewise, but no detection on usage is performed. A default namespace
 for the ID of the source schema is added with the prefix ```this```.
 
-By default, all dependencies are extracted. ```gen-linkml-profile``` can
-optionally skip classes that are a range for a slot which itself is not
-```required```. In this case, the range is replaced with a
-```ReplacedByProfiler``` type. Further manual inspection will be needed to
-resolve these types, usually by removing the slot.
+By default, all class hierarchy dependencies are extracted.
+```gen-linkml-profile``` will skip any ranges that are not explicitly provided
+on the command line when profiling, but will log that such a skipped range (and
+if its containing attribute is required) was encountered. This allows for
+specific profiling, while still providing a valid target LinkML schema.
 
 ## Usage
 
