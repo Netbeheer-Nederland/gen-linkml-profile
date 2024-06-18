@@ -143,7 +143,6 @@ class SchemaProfiler(object):
         """Create a new LinkML schema based on the provided class name(s) and
         their dependencies.
         """
-        # TODO: Replace SchemaView with SchemaDefinition to prevent magic behaviour
         builder = self._create_builder()
         log.info(f'Profiling classes: {", ".join(sorted(self.c_names))}')
         for c_name in self.c_names:
@@ -185,39 +184,3 @@ class SchemaProfiler(object):
                 attributes[snake_case] = s_def
             self.schema.classes[c_name]['attributes'] = attributes
         return self.schema
-
-    def data_product(self, class_name):
-        """Process a single class as a data product."""
-        builder = self._create_builder()
-        # Retrieve class
-        c_def = self.view.get_class(class_name)
-        if c_def is None:
-            raise ValueError(f'Class "{class_name}" not found in schema')
-        # Flatten class hierarchy
-        c_def = self.view.induced_class(c_def.name)
-        for s_name, s_def in c_def['attributes'].items():
-            if s_def.range is None:
-                continue
-            # Check if range is a class
-            c_range = self.view.get_class(s_def.range)
-            if c_range is None:
-                log.debug(f'Range "{s_def.range}" is not a class, skipping')
-                continue
-            # Replace range with type of the identifier for the referred class
-            s_range_def = self.view.get_identifier_slot(c_range.name, imports=False)
-            if s_range_def is None:
-                log.error(f'No identifying slot found for "{c_range.name}"')
-                continue
-            s_range = self.view.get_slot(s_range_def.name)
-            if s_range is None:
-                log.debug(f'No identifier found for "{c_def.name}::{s_def.name}"')
-                continue
-            log.debug(f'Set range "{s_range.name}" for "{c_def.name}::{s_def.name}"')
-            # TODO: check if the identifying slot range is not another class
-            s_def.range = s_range.range
-        # Clean up class
-        c_def.is_a = None
-        # Generate output
-        log.info(f'Processed class "{c_def.name}" as data product')
-        builder.add_class(c_def)
-        return builder.schema

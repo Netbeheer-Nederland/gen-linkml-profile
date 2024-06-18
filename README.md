@@ -32,7 +32,6 @@ Options:
 
 Commands:
   children      Show all children for the class in a hierarchical view
-  data-product  Process a single class as a data product
   docs          Generate a documentation table for the class names
   export        Export an OWL/XML output file.
   merge         Merge one or more schemas into the target schema

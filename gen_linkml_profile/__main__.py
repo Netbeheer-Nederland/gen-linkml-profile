@@ -149,17 +149,6 @@ def pydantic(yamlfile, attr, out, fix_doc):
 @cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
-@option('--class-name', '-c', required=True, help='Class to profile')
-@argument('yamlfile', type=File('rt'), default=stdin)
-def data_product(yamlfile, out, class_name):
-    """Process a single class as a data product"""
-    profiler = SchemaProfiler(yamlfile.read())
-    echo(schema_as_yaml_dump(profiler.data_product(class_name)), file=out)
-
-
-@cli.command()
-@option('--out', '-o', type=File('wt'), default=stdout,
-        help='Output file.  Omit to print schema to stdout')
 @argument('yamlfile', type=File('rt'), default=stdin)
 def export(yamlfile, out, **kwargs):
     """Export an OWL/XML output file. Can be read by SparX EA"""
