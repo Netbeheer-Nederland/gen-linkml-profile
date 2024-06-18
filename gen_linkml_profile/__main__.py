@@ -37,22 +37,6 @@ def cli(log, debug):
 
 
 @cli.command()
-@option('--schema', '-s', type=File('rt'), required=True, default=stdin,
-        help='Schema to merge into yamlfile')
-@option('--out', '-o', type=File('wt'), default=stdout,
-        help='Output file.  Omit to print schema to stdout')
-@option('--clobber', is_flag=True, help='Overwrite existing elements')
-@argument('yamlfile', type=File('rt'), default=stdin)
-def merge(yamlfile, schema, out, clobber):
-    """Merge one or more schemas into the target schema"""
-    view = SchemaView(yamlfile.read(), merge_imports=False)
-    view.merge_schema(SchemaView(schema.read(), merge_imports=False).schema,
-                      clobber)
-    # Output
-    echo(schema_as_yaml_dump(view.schema), file=out)
-
-
-@cli.command()
 @option('--class-name', '-c', required=False, multiple=True,
         help='Root of class hierarchy')
 @argument('yamlfile', type=File('rt'), default=stdin)
