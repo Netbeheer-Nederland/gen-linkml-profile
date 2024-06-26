@@ -146,6 +146,16 @@ def export(yamlfile, out, **kwargs):
 
 
 @cli.command()
+@argument('yamlfile', type=File('rt'), default=stdin)
+def leaves(yamlfile):
+    """Log all leaf classes (classes without parents) in the LinkML schema.
+    Useful for determining which classes to include in diagrams.
+    """
+    profiler = SchemaProfiler(yamlfile.read())
+    profiler.leaves()
+
+
+@cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
 @option('--class-name', '-c', required=True, multiple=True,

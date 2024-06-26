@@ -34,6 +34,7 @@ Commands:
   children      Show all children for the class in a hierarchical view
   docs          Generate a documentation table for the class names
   export        Export an OWL/XML output file.
+  leaves        Log all leaf classes (classes without parents) in the LinkML...
   profile       Create a new LinkML schema based on the provided class...
   pydantic      Pre-process the schema for use by gen-pydantic
 ```

@@ -70,6 +70,11 @@ class SchemaProfiler(object):
                     len(self.view.all_enums()))
         log.info(f'Schema contains [{c}] classes, [{t}] types and [{en}] enums')
 
+    def leaves(self):
+        """Log all leaf classes (classes without parents)."""
+        log.info('Schema contains the following leaves: ' +
+                 ', '.join(self.view.class_leaves(imports=False)))
+
     def _create_builder(self):
         """Create a new Builder object based on the provided view."""
         builder = ProfilingSchemaBuilder(id=self.schema.id,
