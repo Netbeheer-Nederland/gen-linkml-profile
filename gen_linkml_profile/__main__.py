@@ -149,10 +149,20 @@ def export(yamlfile, out, **kwargs):
 @argument('yamlfile', type=File('rt'), default=stdin)
 def leaves(yamlfile):
     """Log all leaf classes (classes without parents) in the LinkML schema.
-    Useful for determining which classes to include in diagrams.
-    """
+    Useful for determining which classes to include in diagrams"""
     profiler = SchemaProfiler(yamlfile.read())
     profiler.leaves()
+
+
+@cli.command()
+@option('--out', '-o', type=File('wt'), default=stdout,
+        help='Output file.  Omit to print schema to stdout')
+@option('--source', type=File('rt'), help='Merge provided schema into this schema')
+@argument('yamlfile', type=File('rt'), default=stdin)
+def merge(yamlfile, out, source, **kwargs):
+    """Merge the source schema into the LinkML schema"""
+    profiler = SchemaProfiler(yamlfile.read())
+    echo(schema_as_yaml_dump(profiler.merge(source.read())), file=out)
 
 
 @cli.command()
@@ -163,7 +173,7 @@ def leaves(yamlfile):
 @argument('yamlfile', type=File('rt'), default=stdin)
 def profile(yamlfile, out, class_name):
     """Create a new LinkML schema based on the provided class name(s) and their
-    dependencies.
+    dependencies
     """
     profiler = SchemaProfiler(yamlfile.read(), class_name)
     echo(schema_as_yaml_dump(profiler.profile()), file=out)

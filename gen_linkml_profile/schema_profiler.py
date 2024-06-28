@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from re import split
 from yaml import load, CBaseLoader
-from copy import deepcopy
+from copy import copy, deepcopy
 
 from linkml.utils.schema_builder import SchemaBuilder
 from linkml.utils.helpers import convert_to_snake_case
@@ -49,10 +49,7 @@ class SchemaProfiler(object):
     """Helper class to profile LinkML schemas."""
     def __init__(self, yamlfile, c_names=None):
         # Load SchemaDefinition from YAML file, to copy from
-        from linkml_runtime.loaders.yaml_loader import YAMLLoader
-        yaml_loader = YAMLLoader()
-        schema: SchemaDefinition
-        self.schema = yaml_loader.load_any(yamlfile, target_class=SchemaDefinition)
+        self.schema = self._load_schema(yamlfile)
         # Create a SchemaView to use as wrapper for querying the schema
         self.view = SchemaView(deepcopy(self.schema), merge_imports=False)
         self.c_names = []
@@ -70,10 +67,12 @@ class SchemaProfiler(object):
                     len(self.view.all_enums()))
         log.info(f'Schema contains [{c}] classes, [{t}] types and [{en}] enums')
 
-    def leaves(self):
-        """Log all leaf classes (classes without parents)."""
-        log.info('Schema contains the following leaves: ' +
-                 ', '.join(self.view.class_leaves(imports=False)))
+    def _load_schema(self, yamlfile):
+        """Create a SchemaDefinition for the provided YAML file."""
+        from linkml_runtime.loaders.yaml_loader import YAMLLoader
+        yaml_loader = YAMLLoader()
+        schema: SchemaDefinition
+        return yaml_loader.load_any(yamlfile, target_class=SchemaDefinition)
 
     def _create_builder(self):
         """Create a new Builder object based on the provided view."""
@@ -188,4 +187,38 @@ class SchemaProfiler(object):
                 # Replace reference
                 attributes[snake_case] = s_def
             self.schema.classes[c_name]['attributes'] = attributes
+        return self.schema
+
+    def leaves(self):
+        """Log all leaf classes (classes without parents)."""
+        log.info('Schema contains the following leaves: ' +
+                 ', '.join(self.view.class_leaves(imports=False)))
+
+    def merge(self, source, clobber=False):
+        """Merge the provided schema into this schema."""
+        schema = self._load_schema(source)
+        # Copied from SchemaView
+        dest = self.schema
+        for k, v in schema.prefixes.items():
+            if clobber or k not in dest.prefixes:
+                dest.prefixes[k] = copy(v)
+        for k, v in schema.classes.items():
+            if clobber or k not in dest.classes:
+                dest.classes[k] = copy(v)
+            for a_k, a_v in v.attributes.items():
+                # Copy attributes as well
+                if clobber or a_k not in dest.classes[k]['attributes']:
+                    dest.classes[k]['attributes'][a_k] = copy(a_v)
+        for k, v in schema.slots.items():
+            if clobber or k not in dest.slots:
+                dest.slots[k] = copy(v)
+        for k, v in schema.types.items():
+            if clobber or k not in dest.types:
+                dest.types[k] = copy(v)
+        for k, v in schema.enums.items():
+            if clobber or k not in dest.enums:
+                dest.enums[k] = copy(v)
+        for k, v in schema.subsets.items():
+            if clobber or k not in dest.subsets:
+                dest.subsets[k] = copy(v)
         return self.schema
