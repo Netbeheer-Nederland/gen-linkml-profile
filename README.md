@@ -32,6 +32,7 @@ Options:
 
 Commands:
   children  Show all children for the class in a hierarchical view
+  diagram   Create a mermaid diagram based on the provided class names
   docs      Generate a documentation table for the class names
   export    Export an OWL/XML output file.
   leaves    Log all leaf classes (classes without parents) in the LinkML...
