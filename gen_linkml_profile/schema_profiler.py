@@ -107,6 +107,10 @@ class SchemaProfiler(object):
             # Use the class from the SchemaDefinition, _not_ the SchemaView
             elem = self.schema[CLASSES][elem.name]
             builder.add_class(elem)
+            # Find all children for this class
+            children = self.view.class_children(elem.name)
+            if len(children) > 0:
+                log.info(f'Class {elem.name} has children: ' + ', '.join(children[:3]) + ' ...')
             # Find all classes that have a slot with range equal to this class
             for c_def in self.view.all_classes().values():
                 for s_def in c_def.attributes.values():
