@@ -198,9 +198,9 @@ class SchemaProfiler(object):
         log.info('Schema contains the following leaves: ' +
                  ', '.join(self.view.class_leaves(imports=False)))
 
-    def merge(self, source, clobber=False):
+    def merge(self, from_schema, clobber=False):
         """Merge the provided schema into this schema."""
-        schema = self._load_schema(source)
+        schema = self._load_schema(from_schema)
         # Copied from SchemaView
         dest = self.schema
         for k, v in schema.prefixes.items():

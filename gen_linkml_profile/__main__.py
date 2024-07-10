@@ -195,12 +195,12 @@ def leaves(yamlfile):
 @cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
-@option('--source', type=File('rt'), help='Merge provided schema into this schema')
-@argument('yamlfile', type=File('rt'), default=stdin)
-def merge(yamlfile, out, source, **kwargs):
+@option('--to-schema', type=File('rt'), help='Merge provided classes into this schema')
+@argument('from-schema', type=File('rt'), default=stdin)
+def merge(from_schema, out, to_schema, **kwargs):
     """Merge the source schema into the LinkML schema"""
-    profiler = SchemaProfiler(yamlfile.read())
-    echo(schema_as_yaml_dump(profiler.merge(source.read())), file=out)
+    profiler = SchemaProfiler(to_schema.read())
+    echo(schema_as_yaml_dump(profiler.merge(from_schema.read())), file=out)
 
 
 @cli.command()
