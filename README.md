@@ -36,6 +36,7 @@ Commands:
   docs      Generate a documentation table for the class names
   export    Export an OWL/XML output file.
   leaves    Log all leaf classes (classes without parents) in the LinkML...
+  lint      Check the schema for common problems
   merge     Merge the source schema into the LinkML schema
   profile   Create a new LinkML schema based on the provided class...
   pydantic  Pre-process the schema for use by gen-pydantic
