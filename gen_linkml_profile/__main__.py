@@ -204,6 +204,14 @@ def merge(from_schema, out, to_schema, **kwargs):
 
 
 @cli.command()
+@argument('yamlfile', type=File('rt'), default=stdin)
+def lint(yamlfile, **kwargs):
+    """Check the schema for common problems"""
+    profiler = SchemaProfiler(yamlfile.read())
+    profiler.lint()
+
+
+@cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
 @option('--class-name', '-c', required=True, multiple=True,

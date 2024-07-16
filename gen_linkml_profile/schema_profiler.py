@@ -198,6 +198,16 @@ class SchemaProfiler(object):
         log.info('Schema contains the following leaves: ' +
                  ', '.join(self.view.class_leaves(imports=False)))
 
+    def lint(self):
+        """Check the schema for common problems."""
+        # Are all used ranges valid?
+        for c_name, c_def in self.schema[CLASSES].items():
+            for s_name, s_def in c_def['attributes'].items():
+                elem = self.view.get_element(s_def.range)
+                if elem is None:
+                    attr = f'{c_name}::{s_name}'
+                    log.error(f'Range "{s_def.range}" for {attr} not found')
+
     def merge(self, from_schema, clobber=False):
         """Merge the provided schema into this schema."""
         schema = self._load_schema(from_schema)
