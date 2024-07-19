@@ -212,6 +212,16 @@ def lint(yamlfile, **kwargs):
 
 
 @cli.command()
+@option('--source', '-s', required=True)
+@option('--destination', '-d', required=True)
+@argument('yamlfile', type=File('rt'), default=stdin)
+def path(yamlfile, source, destination):
+    """Find the shortest path between two classes"""
+    profiler = SchemaProfiler(yamlfile.read())
+    profiler.shortest_path(source, destination)
+
+
+@cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
 @option('--class-name', '-c', required=True, multiple=True,

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gen-linkml-profile"
-version = "0.8.0"
+version = "0.9.0"
 description = ""
 authors = ["Ritger Teunissen <ritger.teunissen@alliander.com>"]
 readme = "README.md"
@@ -12,6 +12,7 @@ click = "^8.1.7"
 treelib = "^1.7.0"
 rdflib = "^7.0.0"
 py-markdown-table = "^0.4.0"
+networkx = "^3.3"
 
 [tool.poetry.scripts]
 gen-linkml-profile = "gen_linkml_profile.__main__:cli"

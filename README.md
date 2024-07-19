@@ -38,6 +38,7 @@ Commands:
   leaves    Log all leaf classes (classes without parents) in the LinkML...
   lint      Check the schema for common problems
   merge     Merge the source schema into the LinkML schema
+  path      Find the shortest path between two classes
   profile   Create a new LinkML schema based on the provided class...
   pydantic  Pre-process the schema for use by gen-pydantic
 ```

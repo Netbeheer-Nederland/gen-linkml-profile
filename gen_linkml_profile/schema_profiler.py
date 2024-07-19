@@ -8,6 +8,7 @@ from copy import copy, deepcopy
 from linkml.utils.schema_builder import SchemaBuilder
 from linkml.utils.helpers import convert_to_snake_case
 
+from networkx import DiGraph, all_shortest_paths, all_simple_paths
 from linkml_runtime.utils.schemaview import (SchemaView,
                                              load_schema_wrap,
                                              SLOTS,
@@ -236,3 +237,27 @@ class SchemaProfiler(object):
             if clobber or k not in dest.subsets:
                 dest.subsets[k] = copy(v)
         return self.schema
+
+    def shortest_path(self, source, destination):
+        """Find the shortest path."""
+        G = DiGraph()
+        # Add classes
+        G.add_nodes_from(self.view.all_classes().keys())
+        # Process edges
+        for c_name in G.copy().nodes():
+            # log.info(f'Processing class "{c_name}"')
+            c_def = self.view.get_class(c_name)
+            if c_def.is_a:
+                # G.add_edge(c_name, c_def.is_a, relation='specialise')
+                G.add_edge(c_def.is_a, c_name, relation='generalise')
+            for s_name, s_def in c_def.attributes.items():
+                if not self._range_is_class(s_def):
+                    continue
+                if s_def.range not in G:
+                    raise ValueError(f'Range "{s_def.range}" not in schema')
+                G.add_edge(c_name, s_def.range, relation='associate')
+        log.info(G)
+        for i, path in enumerate(all_shortest_paths(G, source, destination),
+                                 start=1):
+            # Log command line for use by "profile"
+            log.info(f'Path {i:02d} (cmdline): -c ' + ' -c '.join(path))
