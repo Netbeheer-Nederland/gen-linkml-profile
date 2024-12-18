@@ -2,8 +2,9 @@
 
 from dataclasses import dataclass
 from re import split
-from yaml import load, CBaseLoader
+from yaml import load, CBaseLoader, dump, SafeDumper
 from copy import copy, deepcopy
+from uuid import uuid4
 
 from linkml.utils.schema_builder import SchemaBuilder
 from linkml.utils.helpers import convert_to_snake_case
@@ -237,6 +238,43 @@ class SchemaProfiler(object):
             if clobber or k not in dest.subsets:
                 dest.subsets[k] = copy(v)
         return self.schema
+
+    def example(self, class_name, skip=False):
+        """Generate an example YAML file"""
+        def attr_example(c_name, attr, skip):
+            obj = {}
+            for s_name, s_def in attr.items():
+                if not s_def.required and skip:
+                    log.debug(f'Skipping optional attribute "{s_name}"')
+                    continue
+
+                s_val = ''
+                if self.view.is_inlined(s_def):
+                    log.debug(f'Processing "{s_name}" as inlined list')
+                    a = self.view.induced_class(s_def.range).attributes
+                    s_val = attr_example(s_def.range, a, skip)
+                    if s_def.multivalued:
+                        s_val = [s_val]
+                elif 'range' in s_def and self.view.get_class(s_def.range):
+                    log.debug(f'Processing "{s_def.range}" as range')
+                    id_range = self.view.get_identifier_slot(s_def.range)
+                    if id_range is not None:
+                        s_val = f'|{s_def.range}::{id_range.name}|'
+                        if s_def.multivalued:
+                            s_val = [s_val]
+                elif s_def.range == 'integer':
+                    s_val = 1
+                elif s_def.range == 'boolean':
+                    s_val = True
+                elif 'identifier' in s_def and s_def.identifier:
+                    s_val = f'|{c_name}::{s_name}|'
+                # Store value
+                obj[s_name] = s_val
+            return obj
+
+        c_def = self.view.induced_class(class_name)
+        return dump(attr_example(c_def.name, c_def.attributes, skip),
+                    Dumper=SafeDumper, sort_keys=False)
 
     def shortest_path(self, source, destination):
         """Find the shortest path."""

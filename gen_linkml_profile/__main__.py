@@ -224,6 +224,19 @@ def path(yamlfile, source, destination):
 @cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
+@option('--class-name', '-c', required=True, help='Class(es) to profile')
+@option('--skip', is_flag=True, default=False,
+        help='Skip optional attributes')
+@argument('yamlfile', type=File('rt'), default=stdin)
+def example(yamlfile, out, class_name, skip):
+    """Generate an example from the provided class"""
+    profiler = SchemaProfiler(yamlfile.read())
+    echo(profiler.example(class_name, skip), file=out)
+
+
+@cli.command()
+@option('--out', '-o', type=File('wt'), default=stdout,
+        help='Output file.  Omit to print schema to stdout')
 @option('--class-name', '-c', required=True, multiple=True,
         help='Class(es) to profile')
 @argument('yamlfile', type=File('rt'), default=stdin)
