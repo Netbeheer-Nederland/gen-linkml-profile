@@ -5,6 +5,7 @@ from re import split
 from yaml import load, CBaseLoader, dump, SafeDumper
 from copy import copy, deepcopy
 from uuid import uuid4
+from datetime import datetime
 
 from linkml.utils.schema_builder import SchemaBuilder
 from linkml.utils.helpers import convert_to_snake_case
@@ -248,10 +249,14 @@ class SchemaProfiler(object):
                     log.debug(f'Skipping optional attribute "{s_name}"')
                     continue
 
+                s_range = self.view.get_element(s_def.range)
                 s_val = ''
                 if self.view.is_inlined(s_def):
                     log.debug(f'Processing "{s_name}" as inlined list')
                     a = self.view.induced_class(s_def.range).attributes
+                    # Check for infinite recursion
+                    if c_name in [x.range for x in a.values()]:
+                        raise ValueError(f'"{s_def.range}" refers back to "{c_name}"')
                     s_val = attr_example(s_def.range, a, skip)
                     if s_def.multivalued:
                         s_val = [s_val]
@@ -259,15 +264,25 @@ class SchemaProfiler(object):
                     log.debug(f'Processing "{s_def.range}" as range')
                     id_range = self.view.get_identifier_slot(s_def.range)
                     if id_range is not None:
-                        s_val = f'|{s_def.range}::{id_range.name}|'
+                        s_val = f'{s_def.range}.{id_range.name}'
                         if s_def.multivalued:
                             s_val = [s_val]
-                elif s_def.range == 'integer':
+                elif s_def.range == 'integer' or s_def.range == 'float':
                     s_val = 1
                 elif s_def.range == 'boolean':
                     s_val = True
+                elif s_def.range == 'date':
+                    s_val = datetime.now().strftime('%Y-%m-%d')
+                elif s_def.range == 'datetime':
+                    # This is a mess: validate and convert support different
+                    # time formats, which means it can never be correct.
+                    # s_val = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                    s_val = datetime.now()
+                elif isinstance(s_range, EnumDefinition):
+                    # This is an enum, use the first permissable value
+                    s_val = list(s_range.permissible_values.keys()).pop(0)
                 elif 'identifier' in s_def and s_def.identifier:
-                    s_val = f'|{c_name}::{s_name}|'
+                    s_val = f'{c_name}.{s_name}'
                 # Store value
                 obj[s_name] = s_val
             return obj
