@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from re import split
-from yaml import load, CBaseLoader, dump, SafeDumper
+from yaml import dump, SafeDumper
 from copy import copy, deepcopy
 from uuid import uuid4
 from datetime import datetime
@@ -46,6 +46,11 @@ class ProfilingSchemaBuilder(SchemaBuilder):
 
     def has_enum(self, e_name):
         return e_name in self.schema.enums
+
+
+class IndentDumper(SafeDumper):
+    def increase_indent(self, flow=False, indentless=False):
+        return super(IndentDumper, self).increase_indent(flow, False)
 
 
 class SchemaProfiler(object):
@@ -249,9 +254,9 @@ class SchemaProfiler(object):
                     log.debug(f'Skipping optional attribute "{s_name}"')
                     continue
 
-                s_range = self.view.get_element(s_def.range)
                 s_val = ''
                 if self.view.is_inlined(s_def):
+                    # Inlined processing
                     log.debug(f'Processing "{s_name}" as inlined list')
                     a = self.view.induced_class(s_def.range).attributes
                     # Check for infinite recursion
@@ -260,36 +265,41 @@ class SchemaProfiler(object):
                     s_val = attr_example(s_def.range, a, skip)
                     if s_def.multivalued:
                         s_val = [s_val]
-                elif 'range' in s_def and self.view.get_class(s_def.range):
-                    log.debug(f'Processing "{s_def.range}" as range')
-                    id_range = self.view.get_identifier_slot(s_def.range)
-                    if id_range is not None:
-                        s_val = f'{s_def.range}.{id_range.name}'
-                        if s_def.multivalued:
-                            s_val = [s_val]
-                elif s_def.range == 'integer' or s_def.range == 'float':
-                    s_val = 1
-                elif s_def.range == 'boolean':
-                    s_val = True
-                elif s_def.range == 'date':
-                    s_val = datetime.now().strftime('%Y-%m-%d')
-                elif s_def.range == 'datetime':
-                    # This is a mess: validate and convert support different
-                    # time formats, which means it can never be correct.
-                    # s_val = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-                    s_val = datetime.now()
-                elif isinstance(s_range, EnumDefinition):
-                    # This is an enum, use the first permissable value
-                    s_val = list(s_range.permissible_values.keys()).pop(0)
-                elif 'identifier' in s_def and s_def.identifier:
-                    s_val = f'{c_name}.{s_name}'
+                else:
+                    # Not-inlined processing
+                    s_range = self.view.get_element(s_def.range)
+                    if self.view.get_class(s_def.range):
+                        log.debug(f'Processing "{s_def.range}" as range')
+                        id_range = self.view.get_identifier_slot(s_def.range)
+                        if id_range is not None:
+                            s_val = f'{s_def.range}.{id_range.name}'
+                            if s_def.multivalued:
+                                s_val = [s_val]
+                    if s_def.range == 'integer' or s_def.range == 'float':
+                        s_val = 2
+                    if s_def.range == 'boolean':
+                        s_val = True
+                    if s_def.range == 'date':
+                        s_val = datetime.now().strftime('%Y-%m-%d')
+                    if s_def.range == 'datetime':
+                        # This is a mess: linkml validate and convert support
+                        # different time formats, which means it can never be
+                        # correct.
+                        s_val = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                        # s_val = datetime.now().isoformat()
+                    if isinstance(s_range, EnumDefinition):
+                        # This is an enum, use the first permissable value
+                        s_val = list(s_range.permissible_values.keys()).pop(0)
+                    if s_def.range == 'string' and s_def.identifier:
+                        # Only add a string if the identifier is a string
+                        s_val = f'{c_name}.{s_name}'
                 # Store value
                 obj[s_name] = s_val
             return obj
 
         c_def = self.view.induced_class(class_name)
         return dump(attr_example(c_def.name, c_def.attributes, skip),
-                    Dumper=SafeDumper, sort_keys=False)
+                    Dumper=IndentDumper, sort_keys=False, allow_unicode=True)
 
     def shortest_path(self, source, destination):
         """Find the shortest path."""

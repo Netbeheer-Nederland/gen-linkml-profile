@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gen-linkml-profile"
-version = "0.11.0"
+version = "0.12.0"
 description = ""
 authors = ["Ritger Teunissen <ritger.teunissen@alliander.com>"]
 readme = "README.md"

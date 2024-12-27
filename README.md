@@ -32,6 +32,7 @@ Options:
 
 Commands:
   children  Show all children for the class in a hierarchical view
+  convert   Convert YAML formatted instance data to JSON
   diagram   Create a mermaid diagram based on the provided class names
   docs      Generate a documentation table for the class names
   example   Generate an example from the provided class

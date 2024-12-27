@@ -11,6 +11,8 @@ from linkml_runtime.utils.schema_as_dict import schema_as_yaml_dump
 from linkml_runtime.utils.schemaview import SchemaView
 
 from rdflib import Graph
+from yaml import safe_load
+from json import dumps
 
 import logging
 log = logging.getLogger(__name__)
@@ -232,6 +234,17 @@ def example(yamlfile, out, class_name, skip):
     """Generate an example from the provided class"""
     profiler = SchemaProfiler(yamlfile.read())
     echo(profiler.example(class_name, skip), file=out)
+
+
+@cli.command()
+@option('--out', '-o', type=File('wt'), default=stdout,
+        help='Output file.  Omit to print JSON to stdout')
+@option('--indent', type=int, default=2,
+        help='Indent level to pretty print at')
+@argument('yamlfile', type=File('rt'), default=stdin)
+def convert(yamlfile, out, indent):
+    """Convert YAML formatted instance data to JSON"""
+    echo(dumps(safe_load(yamlfile.read()), indent=indent), file=out)
 
 
 @cli.command()
