@@ -275,6 +275,10 @@ class SchemaProfiler(object):
                             s_val = f'{s_def.range}.{id_range.name}'
                             if s_def.multivalued:
                                 s_val = [s_val]
+                    if s_def.slot_uri == 'dct:conformsTo':
+                        s_val = self.schema.id
+                    if s_def.slot_uri == 'owl:versionInfo':
+                        s_val = self.schema.version
                     if s_def.range == 'integer' or s_def.range == 'float':
                         s_val = 2
                     if s_def.range == 'boolean':
