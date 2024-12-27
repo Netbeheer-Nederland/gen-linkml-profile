@@ -73,6 +73,7 @@ class SchemaProfiler(object):
                 log.warning(e)
         c, t, en = (len(self.view.all_classes()), len(self.view.all_types()),
                     len(self.view.all_enums()))
+        self._uuid = {}
         log.info(f'Schema contains [{c}] classes, [{t}] types and [{en}] enums')
 
     def _load_schema(self, yamlfile):
@@ -245,6 +246,13 @@ class SchemaProfiler(object):
                 dest.subsets[k] = copy(v)
         return self.schema
 
+    def _get_uuid(self, identifier):
+        """Get a uuid4 for an identifier."""
+        if identifier not in self._uuid:
+            log.debug(f'Generating uuid for "{identifier}"')
+            self._uuid[identifier] = str(uuid4())
+        return self._uuid[identifier]
+
     def example(self, class_name, skip=False):
         """Generate an example YAML file"""
         def attr_example(c_name, attr, skip):
@@ -272,7 +280,7 @@ class SchemaProfiler(object):
                         log.debug(f'Processing "{s_def.range}" as range')
                         id_range = self.view.get_identifier_slot(s_def.range)
                         if id_range is not None:
-                            s_val = f'{s_def.range}.{id_range.name}'
+                            s_val = self._get_uuid(f'{s_def.range}.{id_range.name}')
                             if s_def.multivalued:
                                 s_val = [s_val]
                     if s_def.slot_uri == 'dct:conformsTo':
@@ -296,7 +304,7 @@ class SchemaProfiler(object):
                         s_val = list(s_range.permissible_values.keys()).pop(0)
                     if s_def.range == 'string' and s_def.identifier:
                         # Only add a string if the identifier is a string
-                        s_val = f'{c_name}.{s_name}'
+                        s_val = self._get_uuid(f'{c_name}.{s_name}')
                 # Store value
                 obj[s_name] = s_val
             return obj
