@@ -267,7 +267,7 @@ class SchemaProfiler(object):
                     # Inlined processing
                     log.debug(f'Processing "{s_name}" as inlined list')
                     # a = self.view.induced_class(s_def.range).attributes
-                    a = self.view.class_slots(s_def.range)
+                    a = self.view.induced_class(s_def.range).attributes
                     # Check for infinite recursion
                     if c_name in [x.range for x in a.values()]:
                         raise ValueError(f'"{s_def.range}" refers back to "{c_name}"')
@@ -311,8 +311,7 @@ class SchemaProfiler(object):
             return obj
 
         c_def = self.view.induced_class(class_name)
-        return dump(attr_example(c_def.name,
-                                 self.schema.class_slots(c_def.name), skip),
+        return dump(attr_example(c_def.name, c_def.attributes, skip),
                     Dumper=IndentDumper, sort_keys=False, allow_unicode=True)
 
     def shortest_path(self, source, destination):
