@@ -175,6 +175,17 @@ class SchemaProfiler(object):
         # return ''.join('_' + c if c.isupper() else c for c in s).strip()
         return convert_to_snake_case(s)
 
+    def _pluralise(self, s):
+        """Create the plural for a singular noun, in English. Ignores edge
+        cases"""
+        # Apply common rules for regular plurals
+        if s.endswith('y') and s[-2] not in 'aeiou':
+            return s[:-1] + 'ies'  # e.g., "city" -> "cities"
+        elif s.endswith(('s', 'x', 'z', 'ch', 'sh')):
+            return s + 'es'  # e.g., "box" -> "boxes"
+        else:
+            return s + 's'  # e.g., "dog" -> "dogs"
+
     def pydantic(self, attr, fix_doc):
         """Pre-process the schema for use by gen-pydantic."""
         for c_name, c_def in self.schema[CLASSES].items():
@@ -309,10 +320,67 @@ class SchemaProfiler(object):
                 # Store value
                 obj[s_name] = s_val
             return obj
-
+        # Output to YAML
         c_def = self.view.induced_class(class_name)
         return dump(attr_example(c_def.name, c_def.attributes, skip),
                     Dumper=IndentDumper, sort_keys=False, allow_unicode=True)
+
+    def _get_slots_by_range(self, range_name):
+        """ """
+        range_slots = []
+        for s in self.view.all_slots().values():
+            if s.range == range_name and s not in range_slots:
+                range_slots.append(s)
+        return range_slots
+
+    def dataset(self, class_name=None, leaves=True):
+        """Generate a dataset class. This is handled best-effort, i.e.
+        inheritance is not handled correctly and needs to be manually
+        corrected."""
+        class_name = 'DataSet' if class_name is None else class_name
+        # Initial DataSet
+        dataset = {'description': 'A single instance of a published dataset.',
+                   'attributes': {
+                       'identifier': {'slot_uri': 'dct:identifier',
+                                      'multivalued': False,
+                                      'required': True},
+                       'conforms_to': {'slot_uri': 'dct:conformsTo',
+                                       'multivalued': False,
+                                       'required': True},
+                       'contact_point': {'slot_uri': 'dct:contactPoint',
+                                         'multivalued': False,
+                                         'required': True},
+                       'release_date': {'slot_uri': 'dct:issued',
+                                        'multivalued': False,
+                                        'required': True},
+                       'version': {'slot_uri': 'owl:versionInfo',
+                                   'multivalued': False,
+                                   'required': True}},
+                   'class_uri': f'this:{class_name}',
+                   'tree_root': True}
+        # Process all classes as an attribute
+        classes = (self.view.class_leaves() if leaves else
+                   self.view.all_classes())
+        for c_range in classes:
+            # Skip inlined classes
+            is_inlined = []
+            for s_def in self._get_slots_by_range(c_range):
+                is_inlined.append(self.view.is_inlined(s_def))
+            if len(is_inlined) > 0 and all(is_inlined):
+                log.info(f'Skipping inlined range {c_range}')
+                continue
+            # Convert to camelCase, IF naming convention has been followed
+            c_plural = self._pluralise(c_range)
+            c_name = c_plural[0].lower() + c_plural[1:]
+            attr = {'description': f'All instances of {c_range}-s',
+                    'slot_uri': f'this:{class_name}.{c_name}',
+                    'multivalued': True,
+                    'range': c_range,
+                    'required': True}
+            dataset['attributes'][self._snake_case(f'{c_plural}')] = attr
+        # Convert to YAML
+        return dump({f'{class_name}': dataset}, Dumper=IndentDumper,
+                    sort_keys=False, allow_unicode=True)
 
     def shortest_path(self, source, destination):
         """Find the shortest path."""

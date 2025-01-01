@@ -250,6 +250,20 @@ def convert(yamlfile, out, indent):
 @cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
+@option('--class-name', '-c', default=None,
+        help='Class name to use for dataset')
+@option('--leaves', is_flag=True, default=False,
+        help='Generate the dataset only using leaf classes')
+@argument('yamlfile', type=File('rt'), default=stdin)
+def dataset(yamlfile, out, class_name, leaves):
+    """Generate an example from the provided class"""
+    profiler = SchemaProfiler(yamlfile.read())
+    echo(profiler.dataset(class_name, leaves), file=out)
+
+
+@cli.command()
+@option('--out', '-o', type=File('wt'), default=stdout,
+        help='Output file.  Omit to print schema to stdout')
 @option('--class-name', '-c', required=True, multiple=True,
         help='Class(es) to profile')
 @argument('yamlfile', type=File('rt'), default=stdin)
