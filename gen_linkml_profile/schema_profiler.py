@@ -264,65 +264,71 @@ class SchemaProfiler(object):
             self._uuid[identifier] = str(uuid4())
         return self._uuid[identifier]
 
+    def _attr_example(self, c_name, attr, skip):
+        obj = {}
+        for s_name, s_def in attr.items():
+            if not s_def.required and skip:
+                log.debug(f'Skipping optional attribute "{s_name}"')
+                continue
+
+            s_val = ''
+            if self.view.is_inlined(s_def):
+                # Inlined processing
+                log.debug(f'Processing "{s_name}" as inlined list')
+                # a = self.view.induced_class(s_def.range).attributes
+                a = self.view.induced_class(s_def.range).attributes
+                # Check for infinite recursion
+                if c_name in [x.range for x in a.values()]:
+                    raise ValueError(f'"{s_def.range}" refers back to "{c_name}"')
+                s_val = self._attr_example(s_def.range, a, skip)
+                if s_def.multivalued:
+                    s_val = [s_val]
+            else:
+                # Not-inlined processing
+                s_range = self.view.get_element(s_def.range)
+                if isinstance(s_range, TypeDefinition) and s_range.typeof is not None:
+                    # FIXME: how broken is this assumption?
+                    log.debug(f'Resolving type "{s_def.range}" to "{s_range.typeof}"')
+                    s_def.range = s_range.typeof
+                if self.view.get_class(s_def.range):
+                    log.debug(f'Processing "{s_def.range}" as range')
+                    id_range = self.view.get_identifier_slot(s_def.range)
+                    if id_range is not None:
+                        s_val = self._get_uuid(f'{s_def.range}.{id_range.name}')
+                        if s_def.multivalued:
+                            s_val = [s_val]
+                if s_def.slot_uri.split(':')[1] == 'conformsTo':
+                    # Throw away prefix and hope this works
+                    s_val = self.schema.id
+                if s_def.slot_uri == 'owl:versionInfo':
+                    s_val = self.schema.version
+                if s_def.range == 'integer' or s_def.range == 'float':
+                    s_val = 2
+                if s_def.range == 'boolean':
+                    s_val = True
+                if s_def.range == 'date':
+                    s_val = datetime.now().strftime('%Y-%m-%d')
+                if s_def.range == 'datetime':
+                    # This is a mess: linkml validate and convert support
+                    # different time formats, which means it can never be
+                    # correct.
+                    s_val = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                    # s_val = datetime.now().isoformat()
+                if isinstance(s_range, EnumDefinition):
+                    # This is an enum, use the first permissable value
+                    s_val = list(s_range.permissible_values.keys()).pop(0)
+                if s_def.range == 'string' and s_def.identifier:
+                    # Only add a string if the identifier is a string
+                    s_val = self._get_uuid(f'{c_name}.{s_name}')
+            # Store value
+            obj[s_name] = s_val
+        return obj
+
     def example(self, class_name, skip=False):
         """Generate an example YAML file"""
-        def attr_example(c_name, attr, skip):
-            obj = {}
-            for s_name, s_def in attr.items():
-                if not s_def.required and skip:
-                    log.debug(f'Skipping optional attribute "{s_name}"')
-                    continue
-
-                s_val = ''
-                if self.view.is_inlined(s_def):
-                    # Inlined processing
-                    log.debug(f'Processing "{s_name}" as inlined list')
-                    # a = self.view.induced_class(s_def.range).attributes
-                    a = self.view.induced_class(s_def.range).attributes
-                    # Check for infinite recursion
-                    if c_name in [x.range for x in a.values()]:
-                        raise ValueError(f'"{s_def.range}" refers back to "{c_name}"')
-                    s_val = attr_example(s_def.range, a, skip)
-                    if s_def.multivalued:
-                        s_val = [s_val]
-                else:
-                    # Not-inlined processing
-                    s_range = self.view.get_element(s_def.range)
-                    if self.view.get_class(s_def.range):
-                        log.debug(f'Processing "{s_def.range}" as range')
-                        id_range = self.view.get_identifier_slot(s_def.range)
-                        if id_range is not None:
-                            s_val = self._get_uuid(f'{s_def.range}.{id_range.name}')
-                            if s_def.multivalued:
-                                s_val = [s_val]
-                    if s_def.slot_uri == 'dct:conformsTo':
-                        s_val = self.schema.id
-                    if s_def.slot_uri == 'owl:versionInfo':
-                        s_val = self.schema.version
-                    if s_def.range == 'integer' or s_def.range == 'float':
-                        s_val = 2
-                    if s_def.range == 'boolean':
-                        s_val = True
-                    if s_def.range == 'date':
-                        s_val = datetime.now().strftime('%Y-%m-%d')
-                    if s_def.range == 'datetime':
-                        # This is a mess: linkml validate and convert support
-                        # different time formats, which means it can never be
-                        # correct.
-                        s_val = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-                        # s_val = datetime.now().isoformat()
-                    if isinstance(s_range, EnumDefinition):
-                        # This is an enum, use the first permissable value
-                        s_val = list(s_range.permissible_values.keys()).pop(0)
-                    if s_def.range == 'string' and s_def.identifier:
-                        # Only add a string if the identifier is a string
-                        s_val = self._get_uuid(f'{c_name}.{s_name}')
-                # Store value
-                obj[s_name] = s_val
-            return obj
         # Output to YAML
         c_def = self.view.induced_class(class_name)
-        return dump(attr_example(c_def.name, c_def.attributes, skip),
+        return dump(self._attr_example(c_def.name, c_def.attributes, skip),
                     Dumper=IndentDumper, sort_keys=False, allow_unicode=True)
 
     def _get_slots_by_range(self, range_name):
