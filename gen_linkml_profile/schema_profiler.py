@@ -382,7 +382,8 @@ class SchemaProfiler(object):
                     'slot_uri': f'this:{class_name}.{c_name}',
                     'multivalued': True,
                     'range': c_range,
-                    'required': True}
+                    'required': True,
+                    'inlined_as_list': True}
             dataset['attributes'][self._snake_case(f'{c_plural}')] = attr
         # Convert to YAML
         return dump({f'{class_name}': dataset}, Dumper=IndentDumper,
