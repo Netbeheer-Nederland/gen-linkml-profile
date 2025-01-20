@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from click import option, group, argument, File, echo
+from click import option, group, argument, File, echo, ClickException
+from functools import wraps, partial
 from sys import stdin, stdout
 
 from .schema_profiler import SchemaProfiler
@@ -18,6 +19,20 @@ import logging
 log = logging.getLogger(__name__)
 
 LOG_FORMAT = '[%(asctime)s] [%(levelname)s] %(message)s'
+
+
+def catch_exception(func=None, *, handle):
+    if not func:
+        return partial(catch_exception, handle=handle)
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except handle as e:
+            log.error(e)
+            # raise ClickException(e)
+    return wrapper
 
 
 @group()
@@ -67,40 +82,40 @@ def children(yamlfile, class_name):
 
 @cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
-         help='Output file.  Omit to print schema to stdout')
+        help='Output file.  Omit to print schema to stdout')
 @option('--class-name', '-c', required=True, multiple=True,
-         help='Class(es) to profile')
+        help='Class(es) to profile')
 @argument('yamlfile', type=File('rt'), default=stdin)
 def diagram(yamlfile, out, class_name):
-     """Create a mermaid diagram based on the provided class names"""
-     view = SchemaView(yamlfile.read(), merge_imports=False)
-     c, t, e = (len(view.all_classes()), len(view.all_types()),
-                len(view.all_enums()))
-     log.info(f'Profiling [{c}] classes, [{t}] types and [{e}] enums')
+    """Create a mermaid diagram based on the provided class names"""
+    view = SchemaView(yamlfile.read(), merge_imports=False)
+    c, t, e = (len(view.all_classes()), len(view.all_types()),
+               len(view.all_enums()))
+    log.info(f'Profiling [{c}] classes, [{t}] types and [{e}] enums')
 
-     ranges = []
-     is_a = []
+    ranges = []
+    is_a = []
 
-     echo('```mermaid')
-     echo('classDiagram')
-     echo('direction RL')
-     echo()
-     for c_name in class_name:
-         c_def = view.get_class(c_name, strict=True)
-         echo(f'class {c_def.name}' + ' {')
-         if c_def.is_a in class_name:
-             is_a.append((c_def.name, c_def.is_a))
-         for s_def in view.class_induced_slots(c_def.name):
-             echo(f'    {s_def.range} {s_def.name}')
-             if s_def.range in class_name:
-                 ranges.append((c_def.name, s_def.range, s_def.name))
-         echo('}')
-     echo()
-     for c, p in is_a:
-         echo(f'{c} --|> {p}')
-     for f, t, n in ranges:
-         echo(f'{f} --> {t} : {n}')
-     echo('```')
+    echo('```mermaid')
+    echo('classDiagram')
+    echo('direction RL')
+    echo()
+    for c_name in class_name:
+        c_def = view.get_class(c_name, strict=True)
+        echo(f'class {c_def.name}' + ' {')
+        if c_def.is_a in class_name:
+            is_a.append((c_def.name, c_def.is_a))
+        for s_def in view.class_induced_slots(c_def.name):
+            echo(f'    {s_def.range} {s_def.name}')
+            if s_def.range in class_name:
+                ranges.append((c_def.name, s_def.range, s_def.name))
+        echo('}')
+    echo()
+    for c, p in is_a:
+        echo(f'{c} --|> {p}')
+    for f, t, n in ranges:
+        echo(f'{f} --> {t} : {n}')
+    echo('```')
 
 
 @cli.command()
@@ -230,6 +245,7 @@ def path(yamlfile, source, destination):
 @option('--skip', is_flag=True, default=False,
         help='Skip optional attributes')
 @argument('yamlfile', type=File('rt'), default=stdin)
+@catch_exception(handle=(ValueError))
 def example(yamlfile, out, class_name, skip):
     """Generate an example from the provided class"""
     profiler = SchemaProfiler(yamlfile.read())
