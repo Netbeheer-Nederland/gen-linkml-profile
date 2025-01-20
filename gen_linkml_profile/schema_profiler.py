@@ -270,29 +270,28 @@ class SchemaProfiler(object):
             if not s_def.required and skip:
                 log.debug(f'Skipping optional attribute "{s_name}"')
                 continue
+            s_range = self.view.get_element(s_def.range)
+            # Check for inversed relationships between classes
+            if isinstance(s_range, ClassDefinition):
+                a = self.view.induced_class(s_def.range).attributes
+                for ancestor in self.view.class_ancestors(c_name):
+                    if ancestor in [x.range for x in a.values()]:
+                        raise ValueError(f'"{s_def.range}" refers back to "{c_name}" as "{ancestor}"')
 
             s_val = ''
             if self.view.is_inlined(s_def):
                 # Inlined processing
                 log.debug(f'Processing "{s_name}" as inlined list')
-                # a = self.view.induced_class(s_def.range).attributes
-                a = self.view.induced_class(s_def.range).attributes
-                # Check for infinite recursion
-                ancestors = self.view.class_ancestors(c_name)
-                for ancestor in ancestors:
-                    if ancestor in [x.range for x in a.values()]:
-                        raise ValueError(f'"{s_def.range}" refers back to "{c_name}" as "{ancestor}"')
                 s_val = self._attr_example(s_def.range, a, skip)
                 if s_def.multivalued:
                     s_val = [s_val]
             else:
                 # Not-inlined processing
-                s_range = self.view.get_element(s_def.range)
                 if isinstance(s_range, TypeDefinition) and s_range.typeof is not None:
                     # FIXME: how broken is this assumption?
                     log.debug(f'Resolving type "{s_def.range}" to "{s_range.typeof}"')
                     s_def.range = s_range.typeof
-                if self.view.get_class(s_def.range):
+                if isinstance(s_range, ClassDefinition):
                     log.debug(f'Processing "{s_def.range}" as range')
                     id_range = self.view.get_identifier_slot(s_def.range)
                     if id_range is not None:
@@ -304,7 +303,7 @@ class SchemaProfiler(object):
                     s_val = self.schema.id
                 if s_def.slot_uri == 'owl:versionInfo':
                     s_val = self.schema.version
-                if s_def.range == 'integer' or s_def.range == 'float':
+                if s_def.range in ['integer', 'float', 'double']:
                     s_val = 2
                 if s_def.range == 'boolean':
                     s_val = True
