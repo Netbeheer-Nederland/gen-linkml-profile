@@ -278,8 +278,10 @@ class SchemaProfiler(object):
                 # a = self.view.induced_class(s_def.range).attributes
                 a = self.view.induced_class(s_def.range).attributes
                 # Check for infinite recursion
-                if c_name in [x.range for x in a.values()]:
-                    raise ValueError(f'"{s_def.range}" refers back to "{c_name}"')
+                ancestors = self.view.class_ancestors(c_name)
+                for ancestor in ancestors:
+                    if ancestor in [x.range for x in a.values()]:
+                        raise ValueError(f'"{s_def.range}" refers back to "{c_name}" as "{ancestor}"')
                 s_val = self._attr_example(s_def.range, a, skip)
                 if s_def.multivalued:
                     s_val = [s_val]
