@@ -83,39 +83,28 @@ def children(yamlfile, class_name):
 @cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
-@option('--class-name', '-c', required=True, multiple=True,
-        help='Class(es) to profile')
+@option('--class-name', '-c', required=True, help='Class to profile')
+@option('--skip', is_flag=True, default=False,
+        help='Skip optional attributes')
 @argument('yamlfile', type=File('rt'), default=stdin)
-def diagram(yamlfile, out, class_name):
-    """Create a mermaid diagram based on the provided class names"""
-    view = SchemaView(yamlfile.read(), merge_imports=False)
-    c, t, e = (len(view.all_classes()), len(view.all_types()),
-               len(view.all_enums()))
-    log.info(f'Profiling [{c}] classes, [{t}] types and [{e}] enums')
-
-    ranges = []
-    is_a = []
-
-    echo('```mermaid')
-    echo('classDiagram')
-    echo('direction RL')
+def diagram(yamlfile, out, class_name, skip):
+    """Create a D2 diagram based on the provided class name"""
+    profiler = SchemaProfiler(yamlfile.read())
+    # Process all classes recursively, starting at class_name
+    rel = []
+    classes = []
+    for from_class, to_class, attr in profiler.iterate_range(class_name, skip):
+        if from_class not in classes:
+            classes.append(from_class)
+        if to_class not in classes:
+            classes.append(to_class)
+        if (from_class, to_class, attr) not in rel:
+            rel.append((from_class, to_class, attr))
+    for c_name in classes:
+        echo(f'{c_name}')
     echo()
-    for c_name in class_name:
-        c_def = view.get_class(c_name, strict=True)
-        echo(f'class {c_def.name}' + ' {')
-        if c_def.is_a in class_name:
-            is_a.append((c_def.name, c_def.is_a))
-        for s_def in view.class_induced_slots(c_def.name):
-            echo(f'    {s_def.range} {s_def.name}')
-            if s_def.range in class_name:
-                ranges.append((c_def.name, s_def.range, s_def.name))
-        echo('}')
-    echo()
-    for c, p in is_a:
-        echo(f'{c} --|> {p}')
-    for f, t, n in ranges:
-        echo(f'{f} --> {t} : {n}')
-    echo('```')
+    for from_class, to_class, attr in rel:
+        echo(f'{from_class} -> {to_class}: "{attr}"')
 
 
 @cli.command()
