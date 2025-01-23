@@ -100,11 +100,15 @@ def diagram(yamlfile, out, class_name, skip):
             classes.append(to_class)
         if (from_class, to_class, attr) not in rel:
             rel.append((from_class, to_class, attr))
+    echo('.Data Product')
+    echo('[d2,svg,theme=4]')
+    echo('----')
     for c_name in classes:
         echo(f'{c_name}')
     echo()
     for from_class, to_class, attr in rel:
         echo(f'{from_class} -> {to_class}: "{attr}"')
+    echo('----')
 
 
 @cli.command()
