@@ -351,6 +351,130 @@ class SchemaProfiler(object):
         return dump(self._attr_example(c_def.name, c_def.attributes, skip),
                     Dumper=IndentDumper, sort_keys=False, allow_unicode=True)
 
+    def _set_value(self, dataset, values):
+        """Create a new instance based on the provided template."""
+        # Template instance is expected at index 0
+        obj = {}
+        # Add values
+        for k, v in values.items():
+            # Disallow any values not in the template
+            if k not in dataset[0]:
+                continue
+            # Copy each key/value to the
+            obj[k] = v
+        # Add the new instance to the dataset
+        dataset.append(obj)
+        return obj
+
+    def _value_exists(self, dataset, key, value):
+        """ """
+        return any(item[key] == value for item in dataset)
+
+    def nbl_forecast(self, csvfile, class_name):
+        """ """
+        # Generate example data based on schema
+        c_def = self.view.induced_class(class_name)
+        dataset = self._attr_example(c_def.name, c_def.attributes, skip=False)
+        # --- MarketRole
+        dataset['market_roles'][0]['type'] = 'CPO'
+        dataset['market_roles'][0]['description'] = 'Charge Point Operator'
+
+        # Mapping between CSV/YAML
+        substations = {}
+        mkt_c_nodes = {}
+        t_nodes = {}
+        market_participants = {}
+
+        # Process each row in the CSV
+        from csv import DictReader
+        reader = DictReader(csvfile)
+        for row in reader:
+            log.info(f'Processing charge point: "{row["100_MarketEvaluationPoint.EAN"]}"')
+            ss_key = row['1_Substation.Name']
+            pt_key = row['2_ConductingEquipment.Name']
+            mp_key = row['110_MarketParticipant.Name']
+
+            if '150' in pt_key:
+                continue
+
+            # --- Substation
+            if not self._value_exists(dataset['substations'], 'description',
+                                      ss_key):
+                obj = {'description': ss_key, 'm_rid': str(uuid4()),
+                       'equipments': []}
+                substations[ss_key] = self._set_value(dataset['substations'],
+                                                      obj)
+            # --- PowerTransformer
+            if not self._value_exists(dataset['power_transformers'],
+                                      'description', pt_key):
+                pt_end = {'description': pt_key, 'm_rid': str(uuid4()),
+                          'terminal': str(uuid4())}
+                obj = {'description': pt_key, 'm_rid': str(uuid4()),
+                       'power_transformer_end': pt_end}
+                power_transformer = self._set_value(dataset['power_transformers'],
+                                                    obj)
+                # Terminal
+                obj = {'description': pt_key, 'm_rid': pt_end['terminal'],
+                       'topological_node': str(uuid4())}
+                terminal = self._set_value(dataset['terminals'], obj)
+                # TopologicalNode
+                obj = {'description': pt_key,
+                       'm_rid': terminal['topological_node'],
+                       'connectivity_nodes': [str(uuid4())]}
+                t_node = self._set_value(dataset['topological_nodes'], obj)
+                t_node['terminal'] = []
+                t_nodes[pt_key] = t_node
+                # MktConnectivityNode
+                obj = {'description': pt_key,
+                       'm_rid': t_node['connectivity_nodes'][0],
+                       'registered_resource': []}
+                mkt_c_nodes[pt_key] = self._set_value(dataset['mkt_connectivity_nodes'], obj)
+                # Add the created PowerTransformer to the substation
+                substation = substations[ss_key]
+                substation['equipments'].append(power_transformer['m_rid'])
+            # --- MarketParticipant
+            if not self._value_exists(dataset['market_participants'],
+                                      'description', mp_key):
+                obj = {'m_rid': str(uuid4()), 'description': mp_key,
+                       'market_role': dataset['market_roles'][0]['m_rid']}
+                market_participants[mp_key] = self._set_value(dataset['market_participants'], obj)
+            # --- EnergyConsumer
+            obj = {'m_rid': str(uuid4()), 'conducting_equipment': str(uuid4())}
+            terminal = self._set_value(dataset['terminals'], obj)
+            t_node = t_nodes[pt_key]
+            t_node['terminal'].append(terminal['m_rid'])
+            obj = {'m_rid': terminal['conducting_equipment'], 'usage_points': []}
+            energy_consumer = self._set_value(dataset['energy_consumers'], obj)
+            obj = {'m_rid': str(uuid4()),
+                   'european_article_number_ean': row['100_MarketEvaluationPoint.EAN']}
+            usage_point = self._set_value(dataset['usage_points'], obj)
+            energy_consumer['usage_points'].append(usage_point['m_rid'])
+            # --- RegisteredLoad
+            market_participant = market_participants[mp_key]
+            obj = {'m_rid': str(uuid4()),
+                   'market_participant': market_participant['m_rid']}
+            registered_load = self._set_value(dataset['registered_loads'], obj)
+            mkt_c_node = mkt_c_nodes[pt_key]
+            mkt_c_node['registered_resource'].append(registered_load['m_rid'])
+
+        # Clean up the template instances
+        for field in ['substations', 'power_transformers', 'terminals',
+                      'topological_nodes', 'mkt_connectivity_nodes',
+                      'registered_loads', 'energy_consumers', 'usage_points',
+                      'market_participants', 'coordinate_systems']:
+            dataset[field].pop(0)
+        # Clear remaining lists in the dataset
+        dataset['ac_line_segments'] = []
+        dataset['analogs'] = []
+        dataset['geographical_regions'] = []
+        dataset['lines'] = []
+        dataset['sub_geographical_regions'] = []
+
+        return dump(dataset, Dumper=IndentDumper, sort_keys=True,
+                    allow_unicode=True)
+
+        # print(dataset['topological_nodes'].pop())
+
     def _get_slots_by_range(self, range_name):
         """ """
         range_slots = []
