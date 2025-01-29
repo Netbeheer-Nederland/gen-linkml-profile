@@ -406,7 +406,7 @@ class SchemaProfiler(object):
         dataset['geographical_regions'].append(geographical_region)
         # --- SubGeographicalRegion
         obj = {'description': 'Stedin', 'm_rid': geographical_region['regions'][0],
-               'substations': []}
+               'substations': [], 'lines': []}
         sub_geographical_region = self._set_value(self._class_instance('SubGeographicalRegion'), obj)
         dataset['sub_geographical_regions'].append(sub_geographical_region)
         # --- MarketRole
@@ -441,7 +441,7 @@ class SchemaProfiler(object):
                 pt_end = {'description': pt_key, 'm_rid': str(uuid4()),
                           'terminal': str(uuid4())}
                 obj = {'description': pt_key, 'm_rid': str(uuid4()),
-                       'power_transformer_end': pt_end}
+                       'power_transformer_end': [pt_end]}
                 power_transformer = self._set_value(self._class_instance('PowerTransformer'), obj)
                 dataset['power_transformers'].append(power_transformer)
                 # Terminal
@@ -471,7 +471,7 @@ class SchemaProfiler(object):
             if not self._value_exists(dataset['market_participants'],
                                       'description', mp_key):
                 obj = {'m_rid': str(uuid4()), 'description': mp_key,
-                       'market_role': market_role['m_rid']}
+                       'market_role': [market_role['m_rid']]}
                 market_participant = self._set_value(self._class_instance('MarketParticipant'), obj)
                 market_participants[mp_key] = market_participant
                 dataset['market_participants'].append(market_participant)
@@ -484,7 +484,7 @@ class SchemaProfiler(object):
             t_node['terminal'].append(terminal['m_rid'])
             # Location
             location = {'main_address': {'postal_code': row['120_StreetAddress.Postalcode'],
-                        'street_detail': {'name': row['121_Streetdetail.Name'], 'number': row['122_Streetdetail.Number']},
+                        'street_detail': {'number': row['122_Streetdetail.Number']},
                         'town_detail': {'name': row['123_Towndetail.Name'], 'state_or_province': row['125_Towndetail.stateOrProvince']}},
                         'm_rid': str(uuid4())}
             # EnergyConsumer
