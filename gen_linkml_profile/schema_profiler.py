@@ -283,25 +283,31 @@ class SchemaProfiler(object):
             self._uuid[identifier] = str(uuid4())
         return self._uuid[identifier]
 
-    def _attr_example(self, c_name, attr, skip):
+    def _class_instance(self, c_name, skip=False, populate=False, prev=None):
+        """Generate a class instance. Supports inlining of classes."""
+        c_def = self.view.induced_class(c_name)
+        # Find ancestors for encapsulating class
+        if prev is not None:
+            ancestors = self.view.class_ancestors(prev)
+        else:
+            ancestors = []
+        # Process attributes
         obj = {}
-        for s_name, s_def in attr.items():
+        for s_name, s_def in c_def.attributes.items():
             if not s_def.required and skip:
-                log.debug(f'Skipping optional attribute "{s_name}"')
+                log.debug(f'Skipping optional attribute "{c_name}::{s_name}"')
+                continue
+            if s_def.range in ancestors:
+                # Do not recurse indefinitely
+                log.error(f'"{c_name}" refers back to {s_def.range}" as "{prev}"')
                 continue
             s_range = self.view.get_element(s_def.range)
-            # Check for inversed relationships between classes
-            if isinstance(s_range, ClassDefinition):
-                a = self.view.induced_class(s_def.range).attributes
-                for ancestor in self.view.class_ancestors(c_name):
-                    if ancestor in [x.range for x in a.values()]:
-                        raise ValueError(f'"{s_def.range}" refers back to "{c_name}" as "{ancestor}"')
-
             s_val = ''
             if self.view.is_inlined(s_def):
                 # Inlined processing
-                log.debug(f'Processing "{s_name}" as inlined list')
-                s_val = self._attr_example(s_def.range, a, skip)
+                log.debug(f'Processing "{c_name}::{s_name}" as inlined list')
+                s_val = self._class_instance(s_def.range, skip, populate,
+                                             c_name)
                 if s_def.multivalued:
                     s_val = [s_val]
             else:
@@ -323,32 +329,31 @@ class SchemaProfiler(object):
                 if s_def.slot_uri == 'owl:versionInfo':
                     s_val = self.schema.version
                 if s_def.range in ['integer', 'float', 'double']:
-                    s_val = 2
+                    s_val = 2 if populate else ''
                 if s_def.range == 'boolean':
-                    s_val = True
+                    s_val = True if populate else ''
                 if s_def.range == 'date':
-                    s_val = datetime.now().strftime('%Y-%m-%d')
+                    s_val = datetime.now().strftime('%Y-%m-%d') if populate else ''
                 if s_def.range == 'datetime':
                     # This is a mess: linkml validate and convert support
                     # different time formats, which means it can never be
                     # correct.
-                    s_val = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+                    s_val = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ') if populate else ''
                     # s_val = datetime.now().isoformat()
                 if isinstance(s_range, EnumDefinition):
                     # This is an enum, use the first permissable value
-                    s_val = list(s_range.permissible_values.keys()).pop(0)
+                    s_val = list(s_range.permissible_values.keys()).pop(0) if populate else ''
                 if s_def.range == 'string' and s_def.identifier:
                     # Only add a string if the identifier is a string
-                    s_val = self._get_uuid(f'{c_name}.{s_name}')
+                    s_val = self._get_uuid(f'{c_name}.{s_name}') if populate else ''
             # Store value
             obj[s_name] = s_val
         return obj
 
-    def example(self, class_name, skip=False):
+    def example(self, c_name, skip=False):
         """Generate an example YAML file"""
         # Output to YAML
-        c_def = self.view.induced_class(class_name)
-        return dump(self._attr_example(c_def.name, c_def.attributes, skip),
+        return dump(self._class_instance(c_name,skip=skip, populate=True),
                     Dumper=IndentDumper, sort_keys=False, allow_unicode=True)
 
     def _set_value(self, dataset, values):
@@ -358,32 +363,56 @@ class SchemaProfiler(object):
         # Add values
         for k, v in values.items():
             # Disallow any values not in the template
-            if k not in dataset[0]:
+            if k not in dataset:
                 continue
             # Copy each key/value to the
             obj[k] = v
-        # Add the new instance to the dataset
-        dataset.append(obj)
         return obj
 
     def _value_exists(self, dataset, key, value):
         """ """
         return any(item[key] == value for item in dataset)
 
-    def nbl_forecast(self, csvfile, class_name):
+    def nbl_forecast(self, csvfile):
         """ """
-        # Generate example data based on schema
-        c_def = self.view.induced_class(class_name)
-        dataset = self._attr_example(c_def.name, c_def.attributes, skip=False)
-        # --- MarketRole
-        dataset['market_roles'][0]['type'] = 'CPO'
-        dataset['market_roles'][0]['description'] = 'Charge Point Operator'
-
+        dataset = {'identifier': '',
+                   'conforms_to': 'http://data.netbeheernederland.nl/dp-nbl-forecast/version/1.0.0',
+                   'contact_point': '',
+                   'release_date': '',
+                   'version': '1.0.0',
+                   'coordinate_systems': [],
+                   'energy_consumers': [],
+                   'geographical_regions': [],
+                   'market_participants': [],
+                   'market_roles': [],
+                   'mkt_connectivity_nodes': [],
+                   'power_transformers': [],
+                   'registered_loads': [],
+                   'sub_geographical_regions': [],
+                   'substations': [],
+                   'terminals': [],
+                   'topological_nodes': [],
+                   'usage_points': []}
         # Mapping between CSV/YAML
         substations = {}
         mkt_c_nodes = {}
         t_nodes = {}
         market_participants = {}
+
+        # --- GeographicalRegion
+        obj = {'description': 'Netherlands', 'm_rid': str(uuid4()),
+               'regions': [str(uuid4())]}
+        geographical_region = self._set_value(self._class_instance('GeographicalRegion'), obj)
+        dataset['geographical_regions'].append(geographical_region)
+        # --- SubGeographicalRegion
+        obj = {'description': 'Stedin', 'm_rid': geographical_region['regions'][0],
+               'substations': []}
+        sub_geographical_region = self._set_value(self._class_instance('SubGeographicalRegion'), obj)
+        dataset['sub_geographical_regions'].append(sub_geographical_region)
+        # --- MarketRole
+        market_role = self._set_value(self._class_instance('MarketRole'),
+                                      {'type': 'CPO', 'm_rid': str(uuid4())})
+        dataset['market_roles'].append(market_role)
 
         # Process each row in the CSV
         from csv import DictReader
@@ -402,8 +431,10 @@ class SchemaProfiler(object):
                                       ss_key):
                 obj = {'description': ss_key, 'm_rid': str(uuid4()),
                        'equipments': []}
-                substations[ss_key] = self._set_value(dataset['substations'],
-                                                      obj)
+                substation = self._set_value(self._class_instance('Substation'), obj)
+                substations[ss_key] = substation
+                sub_geographical_region['substations'].append(substation['m_rid'])
+                dataset['substations'].append(substation)
             # --- PowerTransformer
             if not self._value_exists(dataset['power_transformers'],
                                       'description', pt_key):
@@ -411,24 +442,28 @@ class SchemaProfiler(object):
                           'terminal': str(uuid4())}
                 obj = {'description': pt_key, 'm_rid': str(uuid4()),
                        'power_transformer_end': pt_end}
-                power_transformer = self._set_value(dataset['power_transformers'],
-                                                    obj)
+                power_transformer = self._set_value(self._class_instance('PowerTransformer'), obj)
+                dataset['power_transformers'].append(power_transformer)
                 # Terminal
                 obj = {'description': pt_key, 'm_rid': pt_end['terminal'],
                        'topological_node': str(uuid4())}
-                terminal = self._set_value(dataset['terminals'], obj)
+                terminal = self._set_value(self._class_instance('Terminal'), obj)
+                dataset['terminals'].append(terminal)
                 # TopologicalNode
                 obj = {'description': pt_key,
                        'm_rid': terminal['topological_node'],
                        'connectivity_nodes': [str(uuid4())]}
-                t_node = self._set_value(dataset['topological_nodes'], obj)
+                t_node = self._set_value(self._class_instance('TopologicalNode'), obj)
                 t_node['terminal'] = []
                 t_nodes[pt_key] = t_node
+                dataset['topological_nodes'].append(t_node)
                 # MktConnectivityNode
                 obj = {'description': pt_key,
                        'm_rid': t_node['connectivity_nodes'][0],
                        'registered_resource': []}
-                mkt_c_nodes[pt_key] = self._set_value(dataset['mkt_connectivity_nodes'], obj)
+                mkt_c_node = self._set_value(self._class_instance('MktConnectivityNode'), obj)
+                mkt_c_nodes[pt_key] = mkt_c_node
+                dataset['mkt_connectivity_nodes'].append(mkt_c_node)
                 # Add the created PowerTransformer to the substation
                 substation = substations[ss_key]
                 substation['equipments'].append(power_transformer['m_rid'])
@@ -436,44 +471,48 @@ class SchemaProfiler(object):
             if not self._value_exists(dataset['market_participants'],
                                       'description', mp_key):
                 obj = {'m_rid': str(uuid4()), 'description': mp_key,
-                       'market_role': dataset['market_roles'][0]['m_rid']}
-                market_participants[mp_key] = self._set_value(dataset['market_participants'], obj)
+                       'market_role': market_role['m_rid']}
+                market_participant = self._set_value(self._class_instance('MarketParticipant'), obj)
+                market_participants[mp_key] = market_participant
+                dataset['market_participants'].append(market_participant)
             # --- EnergyConsumer
             obj = {'m_rid': str(uuid4()), 'conducting_equipment': str(uuid4())}
-            terminal = self._set_value(dataset['terminals'], obj)
+            terminal = self._set_value(self._class_instance('Terminal'), obj)
+            dataset['terminals'].append(terminal)
+            # TopologicalNode
             t_node = t_nodes[pt_key]
             t_node['terminal'].append(terminal['m_rid'])
-            obj = {'m_rid': terminal['conducting_equipment'], 'usage_points': []}
-            energy_consumer = self._set_value(dataset['energy_consumers'], obj)
+            # Location
+            location = {'main_address': {'postal_code': row['120_StreetAddress.Postalcode'],
+                        'street_detail': {'name': row['121_Streetdetail.Name'], 'number': row['122_Streetdetail.Number']},
+                        'town_detail': {'name': row['123_Towndetail.Name'], 'state_or_province': row['125_Towndetail.stateOrProvince']}},
+                        'm_rid': str(uuid4())}
+            # EnergyConsumer
+            obj = {'m_rid': terminal['conducting_equipment'],
+                    'usage_points': [], 'location': location}
+            energy_consumer = self._set_value(self._class_instance('EnergyConsumer'), obj)
+            dataset['energy_consumers'].append(energy_consumer)
             obj = {'m_rid': str(uuid4()),
                    'european_article_number_ean': row['100_MarketEvaluationPoint.EAN']}
-            usage_point = self._set_value(dataset['usage_points'], obj)
+            usage_point = self._set_value(self._class_instance('UsagePoint'), obj)
+            dataset['usage_points'].append(usage_point)
             energy_consumer['usage_points'].append(usage_point['m_rid'])
             # --- RegisteredLoad
             market_participant = market_participants[mp_key]
             obj = {'m_rid': str(uuid4()),
                    'market_participant': market_participant['m_rid']}
-            registered_load = self._set_value(dataset['registered_loads'], obj)
+            registered_load = self._set_value(self._class_instance('RegisteredLoad'), obj)
+            dataset['registered_loads'].append(registered_load)
             mkt_c_node = mkt_c_nodes[pt_key]
             mkt_c_node['registered_resource'].append(registered_load['m_rid'])
 
-        # Clean up the template instances
-        for field in ['substations', 'power_transformers', 'terminals',
-                      'topological_nodes', 'mkt_connectivity_nodes',
-                      'registered_loads', 'energy_consumers', 'usage_points',
-                      'market_participants', 'coordinate_systems']:
-            dataset[field].pop(0)
         # Clear remaining lists in the dataset
         dataset['ac_line_segments'] = []
         dataset['analogs'] = []
-        dataset['geographical_regions'] = []
         dataset['lines'] = []
-        dataset['sub_geographical_regions'] = []
 
-        return dump(dataset, Dumper=IndentDumper, sort_keys=True,
+        return dump(dataset, Dumper=IndentDumper, sort_keys=False,
                     allow_unicode=True)
-
-        # print(dataset['topological_nodes'].pop())
 
     def _get_slots_by_range(self, range_name):
         """ """

@@ -248,14 +248,13 @@ def example(yamlfile, out, class_name, skip):
 @cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
-@option('--class-name', '-c', required=True, help='Class(es) to profile')
 @argument('yamlfile', type=File('rt'), default=stdin)
 @argument('csvfile', type=File('rt'), default=stdin)
 @catch_exception(handle=(ValueError))
-def nbl_forecast(yamlfile, csvfile, out, class_name):
+def nbl_forecast(yamlfile, csvfile, out):
     """Generate a NBL Forecast dataset"""
     profiler = SchemaProfiler(yamlfile.read())
-    echo(profiler.nbl_forecast(csvfile, class_name), file=out)
+    echo(profiler.nbl_forecast(csvfile), file=out)
 
 
 @cli.command()
