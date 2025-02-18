@@ -247,25 +247,13 @@ def example(yamlfile, out, class_name, skip):
 
 @cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
-        help='Output file.  Omit to print schema to stdout')
-@argument('yamlfile', type=File('rt'), default=stdin)
-@argument('csvfile', type=File('rt'), default=stdin)
-@catch_exception(handle=(ValueError))
-def nbl_forecast(yamlfile, csvfile, out):
-    """Generate a NBL Forecast dataset"""
-    profiler = SchemaProfiler(yamlfile.read())
-    echo(profiler.nbl_forecast(csvfile), file=out)
-
-
-@cli.command()
-@option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print JSON to stdout')
 @option('--indent', type=int, default=2,
         help='Indent level to pretty print at')
 @argument('yamlfile', type=File('rt'), default=stdin)
 def convert(yamlfile, out, indent):
     """Convert YAML formatted instance data to JSON"""
-    echo(dumps(safe_load(yamlfile.read()), indent=indent), file=out)
+    echo(dumps(safe_load(yamlfile.read()), indent=indent, default=str), file=out)
 
 
 @cli.command()

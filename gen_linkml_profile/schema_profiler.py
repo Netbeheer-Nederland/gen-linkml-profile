@@ -214,7 +214,7 @@ class SchemaProfiler(object):
             # Fix documentation
             if fix_doc and c_def.description is not None:
                 # Clean up description
-                c_def.description = ' '.join(split('\s+', c_def.description))
+                c_def.description = ' '.join(split(r'\s+', c_def.description))
             # Convert attributes to snake_case
             attributes = {}
             for s_name, s_def in c_def['attributes'].items():
@@ -226,7 +226,7 @@ class SchemaProfiler(object):
                     log.debug(f'Processing "{c_name}::{s_name}" as "{snake_case}"')
                 if fix_doc and s_def.description is not None:
                     # Clean up description
-                    s_def.description = ' '.join(split('\s+', s_def.description))
+                    s_def.description = ' '.join(split(r'\s+', s_def.description))
                 # Replace reference
                 attributes[snake_case] = s_def
             self.schema.classes[c_name]['attributes'] = attributes
@@ -372,147 +372,6 @@ class SchemaProfiler(object):
     def _value_exists(self, dataset, key, value):
         """ """
         return any(item[key] == value for item in dataset)
-
-    def nbl_forecast(self, csvfile):
-        """ """
-        dataset = {'identifier': '',
-                   'conforms_to': 'http://data.netbeheernederland.nl/dp-nbl-forecast/version/1.0.0',
-                   'contact_point': '',
-                   'release_date': '',
-                   'version': '1.0.0',
-                   'coordinate_systems': [],
-                   'energy_consumers': [],
-                   'geographical_regions': [],
-                   'market_participants': [],
-                   'market_roles': [],
-                   'mkt_connectivity_nodes': [],
-                   'power_transformers': [],
-                   'registered_loads': [],
-                   'sub_geographical_regions': [],
-                   'substations': [],
-                   'terminals': [],
-                   'topological_nodes': [],
-                   'usage_points': []}
-        # Mapping between CSV/YAML
-        substations = {}
-        mkt_c_nodes = {}
-        t_nodes = {}
-        market_participants = {}
-
-        # --- GeographicalRegion
-        obj = {'description': 'Netherlands', 'm_rid': str(uuid4()),
-               'regions': [str(uuid4())]}
-        geographical_region = self._set_value(self._class_instance('GeographicalRegion'), obj)
-        dataset['geographical_regions'].append(geographical_region)
-        # --- SubGeographicalRegion
-        obj = {'description': 'Stedin', 'm_rid': geographical_region['regions'][0],
-               'substations': [], 'lines': []}
-        sub_geographical_region = self._set_value(self._class_instance('SubGeographicalRegion'), obj)
-        dataset['sub_geographical_regions'].append(sub_geographical_region)
-        # --- MarketRole
-        market_role = self._set_value(self._class_instance('MarketRole'),
-                                      {'type': 'CPO', 'm_rid': str(uuid4())})
-        dataset['market_roles'].append(market_role)
-
-        # Process each row in the CSV
-        from csv import DictReader
-        reader = DictReader(csvfile)
-        for row in reader:
-            log.info(f'Processing charge point: "{row["100_MarketEvaluationPoint.EAN"]}"')
-            ss_key = row['1_Substation.Name']
-            pt_key = row['2_ConductingEquipment.Name']
-            mp_key = row['110_MarketParticipant.Name']
-
-            if '150' in pt_key:
-                continue
-
-            # --- Substation
-            if not self._value_exists(dataset['substations'], 'description',
-                                      ss_key):
-                obj = {'description': ss_key, 'm_rid': str(uuid4()),
-                       'equipments': []}
-                substation = self._set_value(self._class_instance('Substation'), obj)
-                substations[ss_key] = substation
-                sub_geographical_region['substations'].append(substation['m_rid'])
-                dataset['substations'].append(substation)
-            # --- PowerTransformer
-            if not self._value_exists(dataset['power_transformers'],
-                                      'description', pt_key):
-                pt_end = {'description': pt_key, 'm_rid': str(uuid4()),
-                          'terminal': str(uuid4())}
-                obj = {'description': pt_key, 'm_rid': str(uuid4()),
-                       'power_transformer_end': [pt_end]}
-                power_transformer = self._set_value(self._class_instance('PowerTransformer'), obj)
-                dataset['power_transformers'].append(power_transformer)
-                # Terminal
-                obj = {'description': pt_key, 'm_rid': pt_end['terminal'],
-                       'topological_node': str(uuid4())}
-                terminal = self._set_value(self._class_instance('Terminal'), obj)
-                dataset['terminals'].append(terminal)
-                # TopologicalNode
-                obj = {'description': pt_key,
-                       'm_rid': terminal['topological_node'],
-                       'connectivity_nodes': [str(uuid4())]}
-                t_node = self._set_value(self._class_instance('TopologicalNode'), obj)
-                t_node['terminal'] = []
-                t_nodes[pt_key] = t_node
-                dataset['topological_nodes'].append(t_node)
-                # MktConnectivityNode
-                obj = {'description': pt_key,
-                       'm_rid': t_node['connectivity_nodes'][0],
-                       'registered_resource': []}
-                mkt_c_node = self._set_value(self._class_instance('MktConnectivityNode'), obj)
-                mkt_c_nodes[pt_key] = mkt_c_node
-                dataset['mkt_connectivity_nodes'].append(mkt_c_node)
-                # Add the created PowerTransformer to the substation
-                substation = substations[ss_key]
-                substation['equipments'].append(power_transformer['m_rid'])
-            # --- MarketParticipant
-            if not self._value_exists(dataset['market_participants'],
-                                      'description', mp_key):
-                obj = {'m_rid': str(uuid4()), 'description': mp_key,
-                       'market_role': [market_role['m_rid']]}
-                market_participant = self._set_value(self._class_instance('MarketParticipant'), obj)
-                market_participants[mp_key] = market_participant
-                dataset['market_participants'].append(market_participant)
-            # --- EnergyConsumer
-            obj = {'m_rid': str(uuid4()), 'conducting_equipment': str(uuid4())}
-            terminal = self._set_value(self._class_instance('Terminal'), obj)
-            dataset['terminals'].append(terminal)
-            # TopologicalNode
-            t_node = t_nodes[pt_key]
-            t_node['terminal'].append(terminal['m_rid'])
-            # Location
-            location = {'main_address': {'postal_code': row['120_StreetAddress.Postalcode'],
-                        'street_detail': {'number': row['122_Streetdetail.Number']},
-                        'town_detail': {'name': row['123_Towndetail.Name'], 'state_or_province': row['125_Towndetail.stateOrProvince']}},
-                        'm_rid': str(uuid4())}
-            # EnergyConsumer
-            obj = {'m_rid': terminal['conducting_equipment'],
-                    'usage_points': [], 'location': location}
-            energy_consumer = self._set_value(self._class_instance('EnergyConsumer'), obj)
-            dataset['energy_consumers'].append(energy_consumer)
-            obj = {'m_rid': str(uuid4()),
-                   'european_article_number_ean': row['100_MarketEvaluationPoint.EAN']}
-            usage_point = self._set_value(self._class_instance('UsagePoint'), obj)
-            dataset['usage_points'].append(usage_point)
-            energy_consumer['usage_points'].append(usage_point['m_rid'])
-            # --- RegisteredLoad
-            market_participant = market_participants[mp_key]
-            obj = {'m_rid': str(uuid4()),
-                   'market_participant': market_participant['m_rid']}
-            registered_load = self._set_value(self._class_instance('RegisteredLoad'), obj)
-            dataset['registered_loads'].append(registered_load)
-            mkt_c_node = mkt_c_nodes[pt_key]
-            mkt_c_node['registered_resource'].append(registered_load['m_rid'])
-
-        # Clear remaining lists in the dataset
-        dataset['ac_line_segments'] = []
-        dataset['analogs'] = []
-        dataset['lines'] = []
-
-        return dump(dataset, Dumper=IndentDumper, sort_keys=False,
-                    allow_unicode=True)
 
     def _get_slots_by_range(self, range_name):
         """ """
