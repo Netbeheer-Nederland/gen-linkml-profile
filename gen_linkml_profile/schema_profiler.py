@@ -186,6 +186,26 @@ class SchemaProfiler(object):
         else:
             return s + 's'  # e.g., "dog" -> "dogs"
 
+    def ranges(self, leaves=False, skip=False):
+        """
+        """
+        classes = self.view.class_leaves(imports=False) if leaves else self.view.all_classes()
+        for c_name in classes:
+            c_def = self.view.induced_class(c_name)
+            if c_def is None:
+                # Not a class
+                continue
+            for s_name, s_def in c_def.attributes.items():
+                log.debug(f'Processing {c_def.name}::{s_name}')
+                if not s_def.required and skip:
+                    continue
+                elem = self.view.get_element(s_def.range)
+                if elem is None:
+                    continue
+                if isinstance(elem, ClassDefinition):
+                    # range is a class
+                    yield((c_name, elem.name, s_def.slot_uri.split(':')[1]))
+
     def iterate_range(self, c_name, skip=False, p_name=None):
         """Process a hierarchy of classes by following the ranges"""
         c_def = self.view.induced_class(c_name)

@@ -83,31 +83,25 @@ def children(yamlfile, class_name):
 @cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
-@option('--class-name', '-c', required=True, help='Class to profile')
+@option('--leaves', is_flag=True, default=False,
+        help='Generate the diagram only using leaf classes')
 @option('--skip', is_flag=True, default=False,
         help='Skip optional attributes')
 @argument('yamlfile', type=File('rt'), default=stdin)
-def diagram(yamlfile, out, class_name, skip):
+def diagram(yamlfile, out, leaves, skip):
     """Create a D2 diagram based on the provided class name"""
     profiler = SchemaProfiler(yamlfile.read())
-    # Process all classes recursively, starting at class_name
-    rel = []
-    classes = []
-    for from_class, to_class, attr in profiler.iterate_range(class_name, skip):
-        if from_class not in classes:
-            classes.append(from_class)
-        if to_class not in classes:
-            classes.append(to_class)
-        if (from_class, to_class, attr) not in rel:
-            rel.append((from_class, to_class, attr))
-    echo('.Data Product')
+    ranges = list(profiler.ranges(leaves=leaves, skip=skip))
+    classes = sorted(set([x[0] for x in ranges]))
+    #
+    echo('.Diagram')
     echo('[d2,svg,theme=4]')
     echo('----')
     for c_name in classes:
         echo(f'{c_name}')
     echo()
-    for from_class, to_class, attr in rel:
-        echo(f'{from_class} -> {to_class}: "{attr}"')
+    for from_class, to_class, uri in ranges:
+        echo(f'{from_class} -> {to_class}: "{uri}"')
     echo('----')
 
 
