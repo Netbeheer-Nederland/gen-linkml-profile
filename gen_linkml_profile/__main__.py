@@ -92,7 +92,7 @@ def diagram(yamlfile, out, leaves, skip):
     """Create a D2 diagram based on the provided class name"""
     profiler = SchemaProfiler(yamlfile.read())
     ranges = list(profiler.ranges(leaves=leaves, skip=skip))
-    classes = sorted(set([x[0] for x in ranges]))
+    classes = sorted(list({v for x in ranges for v in x[:2]}))
     #
     echo('.Diagram')
     echo('[d2,svg,theme=4]')
