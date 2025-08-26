@@ -228,15 +228,16 @@ def path(yamlfile, source, destination):
 @cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
-@option('--class-name', '-c', required=True, help='Class(es) to profile')
+@option('--leaves', is_flag=True, default=False,
+        help='Generate the dataset only using leaf classes')
 @option('--skip', is_flag=True, default=False,
         help='Skip optional attributes')
 @argument('yamlfile', type=File('rt'), default=stdin)
 @catch_exception(handle=(ValueError))
-def example(yamlfile, out, class_name, skip):
+def example(yamlfile, out, leaves, skip):
     """Generate an example from the provided class"""
     profiler = SchemaProfiler(yamlfile.read())
-    echo(profiler.example(class_name, skip), file=out)
+    echo(profiler.example(leaves, skip), file=out)
 
 
 @cli.command()

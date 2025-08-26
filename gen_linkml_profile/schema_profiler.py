@@ -23,6 +23,7 @@ from linkml_runtime.linkml_model.meta import (ClassDefinition,
                                               EnumDefinition,
                                               TypeDefinition,
                                               SchemaDefinition)
+
 import logging
 log = logging.getLogger(__name__)
 
@@ -187,8 +188,7 @@ class SchemaProfiler(object):
             return s + 's'  # e.g., "dog" -> "dogs"
 
     def ranges(self, leaves=False, skip=False):
-        """
-        """
+        """Return all classes and the ranges between them"""
         classes = self.view.class_leaves(imports=False) if leaves else self.view.all_classes()
         for c_name in classes:
             c_def = self.view.induced_class(c_name)
@@ -304,76 +304,68 @@ class SchemaProfiler(object):
         return self._uuid[identifier]
 
     def _class_instance(self, c_name, skip=False, populate=False, prev=None):
-        """Generate a class instance. Supports inlining of classes."""
+        """Generate a class instance, with example data"""
         c_def = self.view.induced_class(c_name)
-        # Find ancestors for encapsulating class
-        if prev is not None:
-            ancestors = self.view.class_ancestors(prev)
-        else:
-            ancestors = []
+        # TO-DO: add support for _abstract: true_?
+        obj = {'@id': 'urn:uuid:' + self._get_uuid(c_def.class_uri),
+               '@type': c_def.class_uri}
         # Process attributes
-        obj = {}
         for s_name, s_def in c_def.attributes.items():
             if not s_def.required and skip:
                 log.debug(f'Skipping optional attribute "{c_name}::{s_name}"')
                 continue
-            if s_def.range in ancestors:
-                # Do not recurse indefinitely
-                log.error(f'"{c_name}" refers back to {s_def.range}" as "{prev}"')
-                continue
             s_range = self.view.get_element(s_def.range)
             s_val = ''
-            if self.view.is_inlined(s_def):
-                # Inlined processing
-                log.debug(f'Processing "{c_name}::{s_name}" as inlined list')
-                s_val = self._class_instance(s_def.range, skip, populate,
-                                             c_name)
+            # Not-inlined processing
+            if isinstance(s_range, TypeDefinition) and s_range.typeof is not None:
+                # FIXME: how broken is this assumption?
+                log.debug(f'Resolving type "{s_def.range}" to "{s_range.typeof}"')
+                s_def.range = s_range.typeof
+            if isinstance(s_range, ClassDefinition):
+                log.debug(f'Processing "{s_def.range}" as range')
+                # Everything is referenced (inlined: false) and has a urn:uuid
+                s_val = {'@id': 'urn:uuid:' + self._get_uuid(s_range.class_uri)}
                 if s_def.multivalued:
                     s_val = [s_val]
-            else:
-                # Not-inlined processing
-                if isinstance(s_range, TypeDefinition) and s_range.typeof is not None:
-                    # FIXME: how broken is this assumption?
-                    log.debug(f'Resolving type "{s_def.range}" to "{s_range.typeof}"')
-                    s_def.range = s_range.typeof
-                if isinstance(s_range, ClassDefinition):
-                    log.debug(f'Processing "{s_def.range}" as range')
-                    id_range = self.view.get_identifier_slot(s_def.range)
-                    if id_range is not None:
-                        s_val = self._get_uuid(f'{s_def.range}.{id_range.name}')
-                        if s_def.multivalued:
-                            s_val = [s_val]
-                if s_def.slot_uri.split(':')[1] == 'conformsTo':
-                    # Throw away prefix and hope this works
-                    s_val = self.schema.id
-                if s_def.slot_uri == 'owl:versionInfo':
-                    s_val = self.schema.version
-                if s_def.range in ['integer', 'float', 'double']:
-                    s_val = 2 if populate else ''
-                if s_def.range == 'boolean':
-                    s_val = True if populate else ''
-                if s_def.range == 'date':
-                    s_val = datetime.now().strftime('%Y-%m-%d') if populate else ''
-                if s_def.range == 'datetime':
-                    # This is a mess: linkml validate and convert support
-                    # different time formats, which means it can never be
-                    # correct.
-                    s_val = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ') if populate else ''
-                    # s_val = datetime.now().isoformat()
-                if isinstance(s_range, EnumDefinition):
-                    # This is an enum, use the first permissable value
-                    s_val = list(s_range.permissible_values.keys()).pop(0) if populate else ''
-                if s_def.range == 'string' and s_def.identifier:
-                    # Only add a string if the identifier is a string
-                    s_val = self._get_uuid(f'{c_name}.{s_name}') if populate else ''
+            if s_def.slot_uri.split(':')[1] == 'conformsTo':
+                # Throw away prefix and hope this works
+                s_val = self.schema.id
+            if s_def.slot_uri == 'owl:versionInfo':
+                s_val = self.schema.version
+            if s_def.range in ['integer', 'float', 'double']:
+                s_val = 2 if populate else ''
+            if s_def.range == 'boolean':
+                s_val = True if populate else ''
+            if s_def.range == 'date':
+                s_val = datetime.now().strftime('%Y-%m-%d') if populate else ''
+            if s_def.range == 'datetime':
+                # This is a mess: linkml validate and convert support
+                # different time formats, which means it can never be
+                # correct.
+                s_val = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ') if populate else ''
+                # s_val = datetime.now().isoformat()
+            if isinstance(s_range, EnumDefinition):
+                # This is an enum, use the first permissable value
+                s_val = list(s_range.permissible_values.values()).pop(0)['meaning'] if populate else ''
+                s_val = {'@id': s_val}
+            if s_def.range == 'string' and s_def.identifier:
+                # Only add a string if the identifier is a string
+                s_val = self._get_uuid(c_def.class_uri) if populate else ''
             # Store value
-            obj[s_name] = s_val
+            obj[s_def.slot_uri] = s_val
         return obj
 
-    def example(self, c_name, skip=False):
+    def example(self, leaves=True, skip=False):
         """Generate an example YAML file"""
+        classes = self.view.class_leaves(imports=False) if leaves else self.view.all_classes()
+        graph = []
+        context = {k: v.prefix_reference for k, v in self.schema.prefixes.items()}
+        # Create an instance for each class, with references
+        for c_name in classes:
+            graph.append(self._class_instance(c_name, skip=skip,
+                                              populate=True))
         # Output to YAML
-        return dump(self._class_instance(c_name,skip=skip, populate=True),
+        return dump({'@context': context, '@graph': graph},
                     Dumper=IndentDumper, sort_keys=False, allow_unicode=True)
 
     def _set_value(self, dataset, values):
