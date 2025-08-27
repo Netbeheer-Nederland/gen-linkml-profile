@@ -113,7 +113,6 @@ class SchemaProfiler(object):
             if builder.has_class(elem.name):
                 return
             log.info('{s:-^80}'.format(s=f' {elem.name} '))
-            log.debug(f'Adding class "{name}"')
             # Use the class from the SchemaDefinition, _not_ the SchemaView
             elem = self.schema[CLASSES][elem.name]
             builder.add_class(elem)
@@ -149,12 +148,10 @@ class SchemaProfiler(object):
         if isinstance(elem, TypeDefinition):
             if builder.has_type(elem.name):
                 return
-            log.debug(f'Adding type "{name}"')
             builder.add_type(elem)
         if isinstance(elem, EnumDefinition):
             if builder.has_enum(elem.name):
                 return
-            log.debug(f'Adding enum "{name}"')
             builder.add_enum(elem)
 
     def profile(self):
@@ -196,7 +193,6 @@ class SchemaProfiler(object):
                 # Not a class
                 continue
             for s_name, s_def in c_def.attributes.items():
-                log.debug(f'Processing {c_def.name}::{s_name}')
                 if not s_def.required and skip:
                     continue
                 elem = self.view.get_element(s_def.range)
@@ -212,7 +208,6 @@ class SchemaProfiler(object):
         if c_def is None:
             return
         for s_name, s_def in c_def.attributes.items():
-            log.debug(f'Processing {c_def.name}::{s_name}')
             if not s_def.required and skip:
                 continue
             elem = self.view.get_element(s_def.range)
@@ -243,7 +238,6 @@ class SchemaProfiler(object):
                     log.info(f'Processing "{c_name}::{s_name}" as "{snake_case}"')
                 else:
                     snake_case = self._snake_case(s_name)
-                    log.debug(f'Processing "{c_name}::{s_name}" as "{snake_case}"')
                 if fix_doc and s_def.description is not None:
                     # Clean up description
                     s_def.description = ' '.join(split(r'\s+', s_def.description))
@@ -299,30 +293,28 @@ class SchemaProfiler(object):
     def _get_uuid(self, identifier):
         """Get a uuid4 for an identifier."""
         if identifier not in self._uuid:
-            log.debug(f'Generating uuid for "{identifier}"')
             self._uuid[identifier] = str(uuid4())
         return self._uuid[identifier]
 
     def _class_instance(self, c_name, skip=False, populate=False, prev=None):
         """Generate a class instance, with example data"""
         c_def = self.view.induced_class(c_name)
+        if c_def.abstract:
+            raise ValueError(f'"{c_name}" is abstract, cannot instantiate')
         # TO-DO: add support for _abstract: true_?
         obj = {'@id': 'urn:uuid:' + self._get_uuid(c_def.class_uri),
                '@type': c_def.class_uri}
         # Process attributes
         for s_name, s_def in c_def.attributes.items():
             if not s_def.required and skip:
-                log.debug(f'Skipping optional attribute "{c_name}::{s_name}"')
                 continue
             s_range = self.view.get_element(s_def.range)
             s_val = ''
             # Not-inlined processing
             if isinstance(s_range, TypeDefinition) and s_range.typeof is not None:
                 # FIXME: how broken is this assumption?
-                log.debug(f'Resolving type "{s_def.range}" to "{s_range.typeof}"')
                 s_def.range = s_range.typeof
             if isinstance(s_range, ClassDefinition):
-                log.debug(f'Processing "{s_def.range}" as range')
                 # Everything is referenced (inlined: false) and has a urn:uuid
                 s_val = {'@id': 'urn:uuid:' + self._get_uuid(s_range.class_uri)}
                 if s_def.multivalued:
@@ -362,8 +354,11 @@ class SchemaProfiler(object):
         context = {k: v.prefix_reference for k, v in self.schema.prefixes.items()}
         # Create an instance for each class, with references
         for c_name in classes:
-            graph.append(self._class_instance(c_name, skip=skip,
-                                              populate=True))
+            try:
+                graph.append(self._class_instance(c_name, skip=skip,
+                                                  populate=True))
+            except ValueError as e:
+                continue
         # Output to YAML
         return dump({'@context': context, '@graph': graph},
                     Dumper=IndentDumper, sort_keys=False, allow_unicode=True)
