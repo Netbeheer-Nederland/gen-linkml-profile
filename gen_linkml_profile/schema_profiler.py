@@ -324,8 +324,12 @@ class SchemaProfiler(object):
                 s_val = self.schema.id
             if s_def.slot_uri == 'owl:versionInfo':
                 s_val = self.schema.version
-            if s_def.range in ['integer', 'float', 'double']:
+            if s_def.range == 'integer':
                 s_val = 2 if populate else ''
+            if s_def.range == 'float':
+                s_val = {'@value': 2.0, '@type': 'xsd:float'} if populate else ''
+            if s_def.range == 'double':
+                s_val = {'@value': 2.0, '@type': 'xsd:double'} if populate else ''
             if s_def.range == 'boolean':
                 s_val = True if populate else ''
             if s_def.range == 'date':
