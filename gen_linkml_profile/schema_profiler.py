@@ -333,12 +333,14 @@ class SchemaProfiler(object):
             if s_def.range == 'boolean':
                 s_val = True if populate else ''
             if s_def.range == 'date':
-                s_val = datetime.now().strftime('%Y-%m-%d') if populate else ''
+                s_val = {'@value': datetime.now().strftime('%Y-%m-%d'),
+                         '@type': 'xsd:date'} if populate else ''
             if s_def.range == 'datetime':
                 # This is a mess: linkml validate and convert support
                 # different time formats, which means it can never be
                 # correct.
-                s_val = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ') if populate else ''
+                s_val = {'@value': datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
+                         '@type': 'xsd:datetime'} if populate else ''
                 # s_val = datetime.now().isoformat()
             if isinstance(s_range, EnumDefinition):
                 # This is an enum, use the first permissable value
