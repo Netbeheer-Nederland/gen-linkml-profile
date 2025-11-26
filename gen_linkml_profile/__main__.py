@@ -87,11 +87,16 @@ def children(yamlfile, class_name):
         help='Generate the diagram only using leaf classes')
 @option('--skip', is_flag=True, default=False,
         help='Skip optional attributes')
+@option('--directed', is_flag=True, default=False,
+        help='Add directionality to the diagram')
 @argument('yamlfile', type=File('rt'), default=stdin)
-def diagram(yamlfile, out, leaves, skip):
+def diagram(yamlfile, out, leaves, skip, directed):
     """Create a D2 diagram based on the provided class name"""
     profiler = SchemaProfiler(yamlfile.read())
     ranges = list(profiler.ranges(leaves=leaves, skip=skip))
+    if not directed:
+        ranges = [p for i, p in enumerate(ranges)
+                  if p not in ranges[:i] and (p[1], p[0]) not in ranges[:i]]
     classes = sorted(list({v for x in ranges for v in x[:2]}))
     #
     echo('.Diagram')
@@ -100,8 +105,9 @@ def diagram(yamlfile, out, leaves, skip):
     for c_name in classes:
         echo(f'{c_name}')
     echo()
-    for from_class, to_class, uri in ranges:
-        echo(f'{from_class} -> {to_class}: "{uri}"')
+    d = '->' if directed else '--'
+    for from_class, to_class in ranges:
+        echo(f'{from_class} {d} {to_class}')
     echo('----')
 
 

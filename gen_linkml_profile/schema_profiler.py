@@ -200,7 +200,8 @@ class SchemaProfiler(object):
                     continue
                 if isinstance(elem, ClassDefinition):
                     # range is a class
-                    yield((c_name, elem.name, s_def.slot_uri.split(':')[1]))
+                    #yield((c_name, elem.name, s_def.slot_uri.split(':')[1]))
+                    yield((c_name, elem.name))
 
     def iterate_range(self, c_name, skip=False, p_name=None):
         """Process a hierarchy of classes by following the ranges"""
