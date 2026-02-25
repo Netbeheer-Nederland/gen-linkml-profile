@@ -14,11 +14,14 @@ from linkml_runtime.utils.schemaview import SchemaView
 from rdflib import Graph
 from yaml import safe_load
 from json import dumps
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from uuid import uuid4, uuid5, NAMESPACE_DNS
 
 import logging
 log = logging.getLogger(__name__)
 
 LOG_FORMAT = '[%(asctime)s] [%(levelname)s] %(message)s'
+FIXED_DOMAIN = 'netbeheernederland.nl'
 
 
 def catch_exception(func=None, *, handle):
@@ -283,3 +286,26 @@ def profile(yamlfile, out, class_name):
     """
     profiler = SchemaProfiler(yamlfile.read(), class_name)
     echo(schema_as_yaml_dump(profiler.profile()), file=out)
+
+
+def uuid5_with_domain(name: str) -> str:
+    """Generate a stable uuid5
+    """
+    return str(uuid5(NAMESPACE_DNS, f'{name}_{FIXED_DOMAIN}'))
+
+
+@cli.command()
+@option("--var", nargs=2, multiple=True, metavar="KEY VALUE")
+@argument('templatefile', default=stdin)
+def template(templatefile, var):
+    """Generate output based on a jinja2 template"""
+    env = Environment(loader=FileSystemLoader('.'),
+                      undefined=StrictUndefined, autoescape=False)
+    env.globals["uuid4"] = lambda: str(uuid4())
+    env.globals["uuid5"] = uuid5_with_domain
+
+    try:
+        template = env.get_template(templatefile)
+        echo(template.render(dict(var)))
+    except Exception as e:
+        raise ClickException(str(e))
