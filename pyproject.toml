@@ -1,6 +1,6 @@
 [project]
 name = "gen-linkml-profile"
-version = "0.30.0"
+version = "0.30.1"
 description = ""
 authors = [
     { name = "Ritger Teunissen", email = "ritger.teunissen@alliander.com" }
@@ -9,7 +9,7 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = "~=3.10"
 dependencies = [
-    "linkml~=1.7.5",
+    "linkml~=1.7",
     "click~=8.1",
     "treelib~=1.7",
     "rdflib~=7.0",
