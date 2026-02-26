@@ -1,21 +1,24 @@
-[tool.poetry]
+[project]
 name = "gen-linkml-profile"
-version = "0.3.0"
+version = "0.30.0"
 description = ""
-authors = ["Ritger Teunissen <ritger.teunissen@alliander.com>"]
+authors = [
+    { name = "Ritger Teunissen", email = "ritger.teunissen@alliander.com" }
+]
 readme = "README.md"
+license = "Apache-2.0"
+requires-python = "~=3.10"
+dependencies = [
+    "linkml~=1.7.5",
+    "click~=8.1",
+    "treelib~=1.7",
+    "rdflib~=7.0",
+    "py-markdown-table~=0.4",
+    "networkx~=3.3",
+    "jinja2~=3.1",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-linkml = "^1.7.5"
-click = "^8.1.7"
-treelib = "^1.7.0"
-rdflib = "^7.0.0"
-py-markdown-table = "^0.4.0"
-networkx = "^3.3"
-jinja2 = "^3.1.6"
-
-[tool.poetry.scripts]
+[project.scripts]
 gen-linkml-profile = "gen_linkml_profile.__main__:cli"
 
 [build-system]
