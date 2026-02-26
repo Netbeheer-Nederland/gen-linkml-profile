@@ -3,18 +3,6 @@
 from click import option, group, argument, File, echo, ClickException
 from functools import wraps, partial
 from sys import stdin, stdout
-
-from .schema_profiler import SchemaProfiler
-
-from treelib import Tree, Node
-from linkml.generators.owlgen import OwlSchemaGenerator
-from linkml_runtime.utils.schema_as_dict import schema_as_yaml_dump
-from linkml_runtime.utils.schemaview import SchemaView
-
-from rdflib import Graph
-from yaml import safe_load
-from json import dumps
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from uuid import uuid4, uuid5, NAMESPACE_DNS
 
 import logging
@@ -62,6 +50,9 @@ def cli(log, debug):
 @argument('yamlfile', type=File('rt'), default=stdin)
 def children(yamlfile, class_name):
     """Show all children for the class in a hierarchical view"""
+    from treelib import Tree, Node
+    from linkml_runtime.utils.schemaview import SchemaView
+
     view = SchemaView(yamlfile.read(), merge_imports=False)
     c, t, e = (len(view.all_classes()), len(view.all_types()),
                len(view.all_enums()))
@@ -95,6 +86,8 @@ def children(yamlfile, class_name):
 @argument('yamlfile', type=File('rt'), default=stdin)
 def diagram(yamlfile, out, leaves, skip, directed):
     """Create a D2 diagram based on the provided class name"""
+    from .schema_profiler import SchemaProfiler
+
     profiler = SchemaProfiler(yamlfile.read())
     ranges = list(profiler.ranges(leaves=leaves, skip=skip))
     if not directed:
@@ -120,6 +113,8 @@ def diagram(yamlfile, out, leaves, skip, directed):
 @argument('yamlfile', type=File('rt'), default=stdin)
 def docs(yamlfile, class_name):
     """Generate a documentation table for the class names"""
+    from linkml_runtime.utils.schemaview import SchemaView
+
     view = SchemaView(yamlfile.read(), merge_imports=False)
     c, t, e = (len(view.all_classes()), len(view.all_types()),
                len(view.all_enums()))
@@ -176,6 +171,9 @@ def docs(yamlfile, class_name):
 @argument('yamlfile', type=File('rt'), default=stdin)
 def pydantic(yamlfile, attr, out, fix_doc):
     """Pre-process the schema for use by gen-pydantic"""
+    from .schema_profiler import SchemaProfiler
+    from linkml_runtime.utils.schema_as_dict import schema_as_yaml_dump
+
     profiler = SchemaProfiler(yamlfile.read())
     echo(schema_as_yaml_dump(profiler.pydantic(dict(attr), fix_doc=fix_doc)),
          file=out)
@@ -187,6 +185,9 @@ def pydantic(yamlfile, attr, out, fix_doc):
 @argument('yamlfile', type=File('rt'), default=stdin)
 def export(yamlfile, out, **kwargs):
     """Export an OWL/XML output file. Can be read by SparX EA"""
+    from linkml.generators.owlgen import OwlSchemaGenerator
+    from rdflib import Graph
+
     gen = OwlSchemaGenerator(yamlfile.read(), **kwargs)
     ttl = gen.serialize(**kwargs)
     # Convert TTL to RDF/XML
@@ -201,6 +202,8 @@ def export(yamlfile, out, **kwargs):
 def leaves(yamlfile):
     """Log all leaf classes (classes without parents) in the LinkML schema.
     Useful for determining which classes to include in diagrams"""
+    from .schema_profiler import SchemaProfiler
+
     profiler = SchemaProfiler(yamlfile.read())
     profiler.leaves()
 
@@ -212,6 +215,9 @@ def leaves(yamlfile):
 @argument('from-schema', type=File('rt'), default=stdin)
 def merge(from_schema, out, to_schema, **kwargs):
     """Merge the source schema into the LinkML schema"""
+    from .schema_profiler import SchemaProfiler
+    from linkml_runtime.utils.schema_as_dict import schema_as_yaml_dump
+
     profiler = SchemaProfiler(to_schema.read())
     echo(schema_as_yaml_dump(profiler.merge(from_schema.read())), file=out)
 
@@ -220,6 +226,8 @@ def merge(from_schema, out, to_schema, **kwargs):
 @argument('yamlfile', type=File('rt'), default=stdin)
 def lint(yamlfile, **kwargs):
     """Check the schema for common problems"""
+    from .schema_profiler import SchemaProfiler
+
     profiler = SchemaProfiler(yamlfile.read())
     profiler.lint()
 
@@ -230,6 +238,8 @@ def lint(yamlfile, **kwargs):
 @argument('yamlfile', type=File('rt'), default=stdin)
 def path(yamlfile, source, destination):
     """Find the shortest path between two classes"""
+    from .schema_profiler import SchemaProfiler
+
     profiler = SchemaProfiler(yamlfile.read())
     profiler.shortest_path(source, destination)
 
@@ -245,6 +255,8 @@ def path(yamlfile, source, destination):
 @catch_exception(handle=(ValueError))
 def example(yamlfile, out, leaves, skip):
     """Generate an example from the provided class"""
+    from .schema_profiler import SchemaProfiler
+
     profiler = SchemaProfiler(yamlfile.read())
     echo(profiler.example(leaves, skip), file=out)
 
@@ -257,6 +269,9 @@ def example(yamlfile, out, leaves, skip):
 @argument('yamlfile', type=File('rt'), default=stdin)
 def convert(yamlfile, out, indent):
     """Convert YAML formatted instance data to JSON"""
+    from yaml import safe_load
+    from json import dumps
+
     echo(dumps(safe_load(yamlfile.read()), indent=indent, default=str), file=out)
 
 
@@ -270,6 +285,8 @@ def convert(yamlfile, out, indent):
 @argument('yamlfile', type=File('rt'), default=stdin)
 def dataset(yamlfile, out, class_name, leaves):
     """Generate an example from the provided class"""
+    from .schema_profiler import SchemaProfiler
+
     profiler = SchemaProfiler(yamlfile.read())
     echo(profiler.dataset(class_name, leaves), file=out)
 
@@ -284,6 +301,9 @@ def profile(yamlfile, out, class_name):
     """Create a new LinkML schema based on the provided class name(s) and their
     dependencies
     """
+    from .schema_profiler import SchemaProfiler
+    from linkml_runtime.utils.schema_as_dict import schema_as_yaml_dump
+
     profiler = SchemaProfiler(yamlfile.read(), class_name)
     echo(schema_as_yaml_dump(profiler.profile()), file=out)
 
@@ -299,6 +319,8 @@ def uuid5_with_domain(name: str) -> str:
 @argument('templatefile', default=stdin)
 def template(templatefile, var):
     """Generate output based on a jinja2 template"""
+    from jinja2 import Environment, FileSystemLoader, StrictUndefined
+
     env = Environment(loader=FileSystemLoader('.'),
                       undefined=StrictUndefined, autoescape=False)
     env.globals["uuid4"] = lambda: str(uuid4())
