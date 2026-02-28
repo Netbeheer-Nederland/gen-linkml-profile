@@ -321,11 +321,19 @@ def template(templatefile, var):
     """Generate output based on a jinja2 template"""
     from jinja2 import Environment, FileSystemLoader, StrictUndefined
     from uuid import uuid4
+    from dateutil import parser
+    from datetime import timezone
 
     env = Environment(loader=FileSystemLoader('.'),
                       undefined=StrictUndefined, autoescape=False)
     env.globals["uuid4"] = lambda: str(uuid4())
     env.globals["uuid5"] = uuid5_with_domain
+    env.filters["xsd_datetime"] = lambda v: (
+        (lambda dt: dt.replace(tzinfo=timezone.utc)
+         .isoformat(timespec="milliseconds")
+         if dt.tzinfo is None else dt.isoformat(timespec="milliseconds"))
+        (parser.parse(v))
+    )
 
     try:
         template = env.get_template(templatefile)
