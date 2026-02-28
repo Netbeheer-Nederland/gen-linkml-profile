@@ -310,6 +310,7 @@ def profile(yamlfile, out, class_name):
 def uuid5_with_domain(name: str) -> str:
     """Generate a stable uuid5
     """
+    from uuid import uuid5, NAMESPACE_DNS
     return str(uuid5(NAMESPACE_DNS, f'{name}_{FIXED_DOMAIN}'))
 
 
@@ -319,7 +320,7 @@ def uuid5_with_domain(name: str) -> str:
 def template(templatefile, var):
     """Generate output based on a jinja2 template"""
     from jinja2 import Environment, FileSystemLoader, StrictUndefined
-    from uuid import uuid4, uuid5, NAMESPACE_DNS
+    from uuid import uuid4
 
     env = Environment(loader=FileSystemLoader('.'),
                       undefined=StrictUndefined, autoescape=False)
