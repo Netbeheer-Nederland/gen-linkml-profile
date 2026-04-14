@@ -107,60 +107,6 @@ def diagram(yamlfile, out, leaves, skip, directed):
 
 
 @cli.command()
-@option('--class-name', '-c', required=False, multiple=True,
-        help='Root of class hierarchy')
-@argument('yamlfile', type=File('rt'), default=stdin)
-def docs(yamlfile, class_name):
-    """Generate a documentation table for the class names"""
-    from linkml_runtime.utils.schemaview import SchemaView
-
-    view = SchemaView(yamlfile.read(), merge_imports=False)
-    c, t, e = (len(view.all_classes()), len(view.all_types()),
-               len(view.all_enums()))
-    log.info(f'Profiling [{c}] classes, [{t}] types and [{e}] enums')
-
-    from py_markdown_table.markdown_table import markdown_table
-    from re import split
-    rows = []
-    for c_name in class_name:
-        log.info(f'Process class "{c_name}"')
-        c_def = view.induced_class(c_name)
-        if c_def is None:
-            raise ValueError(f'Class "{class_name}" not found in schema')
-        first = True
-        c_description = c_def.description if c_def.description is not None else ''
-        for s_name, s_def in sorted(c_def.attributes.items(), key=lambda x: x[0]):
-            attr = {}
-            req = '1' if s_def.required else '0'
-            mult = '*' if s_def.multivalued else '1'
-            s_description = s_def.description if s_def.description is not None else ''
-            #
-            attr = {'Class Name': c_name if first else '',
-                    'Class Description': c_description if first else '',
-                    'Name': s_name,
-                    'Range': s_def.range,
-                    'Card': f'{req}..{mult}',
-                    'Description': s_description}
-            rows.append(attr)
-            first = False
-    c_name_len = len(max([x['Class Name'] for x in rows], key=len))
-    s_name_len = len(max([x['Name'] for x in rows], key=len))
-    r_name_len = len(max([x['Range'] for x in rows], key=len))
-    echo(markdown_table(rows).set_params(
-         padding_width=0,
-         padding_weight='right',
-         quote=False,
-         multiline_strategy='rows_and_header',
-         multiline={'Class Name': c_name_len if c_name_len > 10 else 10,
-                    'Class Description': 50,
-                    'Name': s_name_len if s_name_len > 4 else 4,
-                    'Range': r_name_len if r_name_len > 5 else 5,
-                    'Card': 4,
-                    'Description': 50}).get_markdown())
-    echo()
-
-
-@cli.command()
 @option('--attr', '-a', type=(str, str), multiple=True,
         help='Manual mapping values. Use --attr [source] [target]')
 @option('--out', '-o', type=File('wt'), default=stdout,
@@ -176,24 +122,6 @@ def pydantic(yamlfile, attr, out, fix_doc):
     profiler = SchemaProfiler(yamlfile.read())
     echo(schema_as_yaml_dump(profiler.pydantic(dict(attr), fix_doc=fix_doc)),
          file=out)
-
-
-@cli.command()
-@option('--out', '-o', type=File('wt'), default=stdout,
-        help='Output file.  Omit to print schema to stdout')
-@argument('yamlfile', type=File('rt'), default=stdin)
-def export(yamlfile, out, **kwargs):
-    """Export an OWL/XML output file. Can be read by SparX EA"""
-    from linkml.generators.owlgen import OwlSchemaGenerator
-    from rdflib import Graph
-
-    gen = OwlSchemaGenerator(yamlfile.read(), **kwargs)
-    ttl = gen.serialize(**kwargs)
-    # Convert TTL to RDF/XML
-    g = Graph()
-    g.parse(data=ttl)
-    # Output
-    echo(g.serialize(format='pretty-xml'), file=out)
 
 
 @cli.command()
@@ -232,35 +160,6 @@ def lint(yamlfile, **kwargs):
 
 
 @cli.command()
-@option('--source', '-s', required=True)
-@option('--destination', '-d', required=True)
-@argument('yamlfile', type=File('rt'), default=stdin)
-def path(yamlfile, source, destination):
-    """Find the shortest path between two classes"""
-    from .schema_profiler import SchemaProfiler
-
-    profiler = SchemaProfiler(yamlfile.read())
-    profiler.shortest_path(source, destination)
-
-
-@cli.command()
-@option('--out', '-o', type=File('wt'), default=stdout,
-        help='Output file.  Omit to print schema to stdout')
-@option('--leaves', is_flag=True, default=False,
-        help='Generate the dataset only using leaf classes')
-@option('--skip', is_flag=True, default=False,
-        help='Skip optional attributes')
-@argument('yamlfile', type=File('rt'), default=stdin)
-@catch_exception(handle=(ValueError))
-def example(yamlfile, out, leaves, skip):
-    """Generate an example from the provided class"""
-    from .schema_profiler import SchemaProfiler
-
-    profiler = SchemaProfiler(yamlfile.read())
-    echo(profiler.example(leaves, skip), file=out)
-
-
-@cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print JSON to stdout')
 @option('--indent', type=int, default=2,
@@ -272,22 +171,6 @@ def convert(yamlfile, out, indent):
     from json import dumps
 
     echo(dumps(safe_load(yamlfile.read()), indent=indent, default=str), file=out)
-
-
-@cli.command()
-@option('--out', '-o', type=File('wt'), default=stdout,
-        help='Output file.  Omit to print schema to stdout')
-@option('--class-name', '-c', default=None,
-        help='Class name to use for dataset')
-@option('--leaves', is_flag=True, default=False,
-        help='Generate the dataset only using leaf classes')
-@argument('yamlfile', type=File('rt'), default=stdin)
-def dataset(yamlfile, out, class_name, leaves):
-    """Generate an example from the provided class"""
-    from .schema_profiler import SchemaProfiler
-
-    profiler = SchemaProfiler(yamlfile.read())
-    echo(profiler.dataset(class_name, leaves), file=out)
 
 
 @cli.command()
@@ -315,9 +198,10 @@ def uuid5_with_domain(name: str) -> str:
 
 
 @cli.command()
-@option("--var", nargs=2, multiple=True, metavar="KEY VALUE")
-@argument('templatefile', default=stdin)
-def template(templatefile, var):
+@option("--var", multiple=True, metavar="KEY")
+@option("--delimiter", default=",")
+@argument('templatefile')
+def template(templatefile, var, delimiter):
     """Generate output based on a jinja2 template"""
     from jinja2 import Environment, FileSystemLoader, StrictUndefined
     from uuid import uuid4
@@ -337,6 +221,13 @@ def template(templatefile, var):
 
     try:
         template = env.get_template(templatefile)
-        echo(template.render(dict(var)))
+
+        if stdin.isatty():
+            raise ValueError('Input must be provided on stdin')
+
+        import csv
+        reader = csv.DictReader(stdin, delimiter=delimiter, fieldnames=var)
+        for row in reader:
+            echo(template.render(**row))
     except Exception as e:
         raise ClickException(str(e))

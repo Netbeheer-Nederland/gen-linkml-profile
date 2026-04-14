@@ -10,7 +10,6 @@ from datetime import datetime
 from linkml.utils.schema_builder import SchemaBuilder
 from linkml.utils.helpers import convert_to_snake_case
 
-from networkx import DiGraph, all_shortest_paths, all_simple_paths
 from linkml_runtime.utils.schemaview import (SchemaView,
                                              load_schema_wrap,
                                              SLOTS,
@@ -247,11 +246,6 @@ class SchemaProfiler(object):
             self.schema.classes[c_name]['attributes'] = attributes
         return self.schema
 
-    def leaves(self):
-        """Log all leaf classes (classes without parents)."""
-        log.info('Schema contains the following leaves: ' +
-                 ', '.join(self.view.class_leaves(imports=False)))
-
     def lint(self):
         """Check the schema for common problems."""
         # Are all used ranges valid?
@@ -394,77 +388,3 @@ class SchemaProfiler(object):
             if s.range == range_name and s not in range_slots:
                 range_slots.append(s)
         return range_slots
-
-    def dataset(self, class_name=None, leaves=True):
-        """Generate a dataset class. This is handled best-effort, i.e.
-        inheritance is not handled correctly and needs to be manually
-        corrected."""
-        class_name = 'DataSet' if class_name is None else class_name
-        # Initial DataSet
-        dataset = {'description': 'A single instance of a published dataset.',
-                   'attributes': {
-                       'identifier': {'slot_uri': 'dct:identifier',
-                                      'multivalued': False,
-                                      'required': True},
-                       'conforms_to': {'slot_uri': 'dct:conformsTo',
-                                       'multivalued': False,
-                                       'required': True},
-                       'contact_point': {'slot_uri': 'dct:contactPoint',
-                                         'multivalued': False,
-                                         'required': True},
-                       'release_date': {'slot_uri': 'dct:issued',
-                                        'multivalued': False,
-                                        'required': True},
-                       'version': {'slot_uri': 'owl:versionInfo',
-                                   'multivalued': False,
-                                   'required': True}},
-                   'class_uri': f'this:{class_name}',
-                   'tree_root': True}
-        # Process all classes as an attribute
-        classes = (self.view.class_leaves() if leaves else
-                   self.view.all_classes())
-        for c_range in classes:
-            # Skip inlined classes
-            is_inlined = []
-            for s_def in self._get_slots_by_range(c_range):
-                is_inlined.append(self.view.is_inlined(s_def))
-            if len(is_inlined) > 0 and all(is_inlined):
-                log.info(f'Skipping inlined range {c_range}')
-                continue
-            # Convert to camelCase, IF naming convention has been followed
-            c_plural = self._pluralise(c_range)
-            c_name = c_plural[0].lower() + c_plural[1:]
-            attr = {'description': f'All instances of {c_range}-s',
-                    'slot_uri': f'this:{class_name}.{c_name}',
-                    'multivalued': True,
-                    'range': c_range,
-                    'required': True,
-                    'inlined_as_list': True}
-            dataset['attributes'][self._snake_case(f'{c_plural}')] = attr
-        # Convert to YAML
-        return dump({f'{class_name}': dataset}, Dumper=IndentDumper,
-                    sort_keys=False, allow_unicode=True)
-
-    def shortest_path(self, source, destination):
-        """Find the shortest path."""
-        G = DiGraph()
-        # Add classes
-        G.add_nodes_from(self.view.all_classes().keys())
-        # Process edges
-        for c_name in G.copy().nodes():
-            # log.info(f'Processing class "{c_name}"')
-            c_def = self.view.get_class(c_name)
-            if c_def.is_a:
-                # G.add_edge(c_name, c_def.is_a, relation='specialise')
-                G.add_edge(c_def.is_a, c_name, relation='generalise')
-            for s_name, s_def in c_def.attributes.items():
-                if not self._range_is_class(s_def):
-                    continue
-                if s_def.range not in G:
-                    raise ValueError(f'Range "{s_def.range}" not in schema')
-                G.add_edge(c_name, s_def.range, relation='associate')
-        log.info(G)
-        for i, path in enumerate(all_shortest_paths(G, source, destination),
-                                 start=1):
-            # Log command line for use by "profile"
-            log.info(f'Path {i:02d} (cmdline): -c ' + ' -c '.join(path))

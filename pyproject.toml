@@ -1,6 +1,6 @@
 [project]
 name = "gen-linkml-profile"
-version = "0.31.0"
+version = "0.32.0"
 description = ""
 authors = [
     { name = "Ritger Teunissen", email = "ritger.teunissen@alliander.com" }
@@ -12,9 +12,6 @@ dependencies = [
     "linkml~=1.7",
     "click~=8.1",
     "treelib~=1.7",
-    "rdflib~=7.0",
-    "py-markdown-table~=0.4",
-    "networkx~=3.3",
     "jinja2~=3.1",
 ]
 
