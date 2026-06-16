@@ -131,7 +131,7 @@ class TreeVisualiser:
                 if direction in seen_dirs:
                     ref_id = str(uuid4())
                     tree.create_node(
-                        f"↩ {label}" + (f" ({rel})" if rel else ""),
+                        f"↩ {label}",
                         ref_id,
                         parent=parent_id,
                     )
@@ -142,7 +142,7 @@ class TreeVisualiser:
 
                 node_id = str(uuid4())
                 tree.create_node(
-                    label + (f" ({rel})" if rel else ""),
+                    label,
                     node_id,
                     parent=parent_id,
                 )
