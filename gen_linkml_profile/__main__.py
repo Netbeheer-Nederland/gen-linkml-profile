@@ -275,21 +275,22 @@ def template(templatefile, var, delimiter):
 @option('--depth', type=int, default=3, help='Recursion depth')
 @option('--id-only', is_flag=True, default=False,
         help='Use only @id in output, no labels')
+@option('--exclude', '-e', multiple=True, help='Type(s) to exclude from output')
 @argument('files', nargs=-1, type=File('rt'))
-def tree(files, root_id, depth, id_only):
-     """Visualise a JSON-LD as tree"""
-     from .tree_visualiser import TreeVisualiser
-     from json import load
+def tree(files, root_id, depth, id_only, exclude):
+    """Visualise a JSON-LD as tree"""
+    from .tree_visualiser import TreeVisualiser
+    from json import load
 
-     nodes = {}
-     for f in files:
-         # get nodes from @graph
-         nodes = nodes | {
-             n["@id"]: n
-             for n in load(f).get("@graph", [])
-             if "@id" in n
-         }
-
-     visualiser = TreeVisualiser(nodes)
-     echo()
-     visualiser.show(root_id, depth, id_only)
+    exclude = exclude if exclude is not None else []
+    nodes = {}
+    for f in files:
+        # get nodes from @graph
+        nodes = nodes | {
+            n["@id"]: n
+            for n in load(f).get("@graph", [])
+            if "@id" in n
+        }
+    visualiser = TreeVisualiser(nodes)
+    echo()
+    visualiser.show(root_id, depth, id_only, exclude)
