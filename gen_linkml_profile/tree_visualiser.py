@@ -67,7 +67,7 @@ class TreeVisualiser:
             else (
                 node.get('cim:IdentifiedObject.name')
                 or node.get('name')
-                or node_id[-12:]
+                or node_id[-8:]
             )
         )
         node_type = node.get('@type', '')
@@ -86,11 +86,10 @@ class TreeVisualiser:
 
         if start_id not in self.nodes:
             raise ValueError(f'Unknown start_id: {start_id}')
-        exclude_types = set(exclude_types or [])
 
+        exclude_types = set(exclude_types or [])
         tree = Tree()
         root_id = str(uuid4())
-
         tree.create_node(
             self.label(start_id, id_only),
             root_id,
@@ -135,11 +134,9 @@ class TreeVisualiser:
                 for src, rel in self.incoming.get(cim_id, [])
                 if src in self.nodes
             ]
-
             if incoming:
                 in_id = str(uuid4())
                 tree.create_node('IN', in_id, parent=parent)
-
                 for src, rel in incoming:
                     add_child_or_splice(
                         src,
@@ -152,20 +149,16 @@ class TreeVisualiser:
                 for tgt, rel in self.outgoing.get(cim_id, [])
                 if tgt in self.nodes
             ]
-
             if outgoing:
                 out_id = str(uuid4())
                 tree.create_node('OUT', out_id, parent=parent)
-
                 for tgt, rel in outgoing:
                     add_child_or_splice(
                         tgt,
                         out_id,
                         depth + 1,
                     )
-
             path.remove(cim_id)
-
         walk(start_id, root_id, 0)
         return tree
 
