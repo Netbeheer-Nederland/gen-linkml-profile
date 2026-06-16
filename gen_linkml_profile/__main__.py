@@ -193,6 +193,26 @@ def example(yamlfile, out, leaves, skip):
 @cli.command()
 @option('--out', '-o', type=File('wt'), default=stdout,
         help='Output file.  Omit to print schema to stdout')
+@option('--skip', is_flag=True, default=False,
+        help='Skip optional attributes')
+@argument('yamlfile', type=File('rt'), default=stdin)
+@catch_exception(handle=(ValueError))
+def purpose(yamlfile, out, skip):
+    """Generate an example from the provided class"""
+    from .schema_profiler import SchemaProfiler
+    profiler = SchemaProfiler(yamlfile.read())
+
+    echo("[cols=\"1, 1, 1\"]\n|===", file=out)
+    echo("|Subject |Predicate |Object", file=out)
+    for s, p, o in profiler.purpose(skip):
+        log.info(f'({s}) {p} -> {o}')
+        echo(f"\n|{s}\n|{p}\n|{o}", file=out)
+    echo("|===", file=out)
+
+
+@cli.command()
+@option('--out', '-o', type=File('wt'), default=stdout,
+        help='Output file.  Omit to print schema to stdout')
 @option('--class-name', '-c', required=True, multiple=True,
         help='Class(es) to profile')
 @argument('yamlfile', type=File('rt'), default=stdin)
@@ -248,3 +268,28 @@ def template(templatefile, var, delimiter):
             echo(template.render(**row))
     except Exception as e:
         raise ClickException(str(e))
+
+
+@cli.command()
+@option('--root-id', help='Root @id')
+@option('--depth', type=int, default=3, help='Recursion depth')
+@option('--id-only', is_flag=True, default=False,
+        help='Use only @id in output, no labels')
+@argument('files', nargs=-1, type=File('rt'))
+def tree(files, root_id, depth, id_only):
+     """Visualise a JSON-LD as tree"""
+     from .tree_visualiser import TreeVisualiser
+     from json import load
+
+     nodes = {}
+     for f in files:
+         # get nodes from @graph
+         nodes = nodes | {
+             n["@id"]: n
+             for n in load(f).get("@graph", [])
+             if "@id" in n
+         }
+
+     visualiser = TreeVisualiser(nodes)
+     echo()
+     visualiser.show(root_id, depth, id_only)

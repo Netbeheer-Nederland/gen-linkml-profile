@@ -364,6 +364,54 @@ class SchemaProfiler(object):
         return dump({'@context': context, '@graph': graph},
                     Dumper=IndentDumper, sort_keys=False, allow_unicode=True)
 
+    def _class_purpose(self, c_name, skip=False):
+        """Generate a class triple"""
+        from pprint import pprint
+        c_def = self.view.induced_class(c_name)
+        if c_def.abstract:
+            raise ValueError(f'"{c_name}" is abstract, cannot instantiate')
+        # Process attributes
+        for s_name, s_def in c_def.attributes.items():
+            if not s_def.required and skip:
+                continue
+            s_range = self.view.get_class(s_def.range)
+            if s_range is None:
+                # TODO: This will skip any range that's not a class!
+                log.debug(f'No range specified for {c_name}.{s_name}')
+                s_range = []
+                if s_def.any_of:
+                    # Are there ranges contained in an any_of?
+                    for any_of in s_def.any_of:
+                        el = self.view.get_element(any_of.range)
+                        s_range.append(el.class_uri)
+                else:
+                    # Use the slot_uri as range
+                    s_range.append(s_def.slot_uri)
+            else:
+                # Use the URI for the associated range
+                s_range = [s_range.class_uri]
+            # Purpose is an annotation
+            if s_def.annotations:
+                if 'object' in s_def.annotations:
+                    # Override range if object is provided
+                    s_range = s_def.annotations.object.value
+                if 'predicate' in s_def.annotations:
+                    v = s_def.annotations.predicate.value
+                    for obj in s_range:
+                        log.debug(f'({c_def.class_uri}) {v} -> {obj}')
+                        yield((c_def.class_uri, v, obj))
+
+    def purpose(self, skip=False):
+        """Create a list of semantic relationships which define purpose."""
+        classes = self.view.class_leaves(imports=False)
+        purpose = []
+        for c_name in classes:
+            try:
+                purpose += [p for p in self._class_purpose(c_name, skip=skip)]
+            except ValueError as e:
+                continue
+        return sorted(purpose, key=lambda k: k[1])
+
     def _set_value(self, dataset, values):
         """Create a new instance based on the provided template."""
         # Template instance is expected at index 0
