@@ -88,15 +88,17 @@ class TreeVisualiser:
             raise ValueError(f"Unknown start_id: {start_id}")
 
         exclude_types = set(exclude_types or [])
+
         tree = Tree()
         root_id = str(uuid4())
+
         tree.create_node(
             self.label(start_id, id_only),
             root_id,
         )
 
-        path = set()      # cycle detection (current recursion stack)
-        visited = set()   # prevents duplicate expansion
+        path = set()          # cycle protection (current recursion stack)
+        visited = {}          # node_id -> set("IN", "OUT")
 
         def is_excluded(node_id: str) -> bool:
             node = self.nodes.get(node_id, {})
@@ -108,59 +110,71 @@ class TreeVisualiser:
         def walk(cim_id: str, parent: str, depth: int):
             if depth >= max_depth:
                 return
-            # cycle detection (only current path)
+
             if cim_id in path:
                 return
+
             path.add(cim_id)
 
-            def add_child_or_splice(target_id: str, parent_id: str, next_depth: int, rel: str = None):
+            def add_child_or_splice(target_id: str, parent_id: str, next_depth: int, direction: str, rel: str = None):
                 if target_id not in self.nodes:
                     return
+
                 if is_excluded(target_id):
                     walk(target_id, parent_id, next_depth)
                     return
+
                 label = self.label(target_id, id_only)
-                # already expanded elsewhere → render as reference
-                if target_id in visited:
-                    child_id = str(uuid4())
+                seen_dirs = visited.setdefault(target_id, set())
+
+                # Already expanded in this direction → render as reference
+                if direction in seen_dirs:
+                    ref_id = str(uuid4())
                     tree.create_node(
-                        f"↩ {label}" + (f" ({rel})" if rel else ""),
-                        child_id,
+                        f"↩ {label} [{direction}]" + (f" ({rel})" if rel else ""),
+                        ref_id,
                         parent=parent_id,
                     )
                     return
-                visited.add(target_id)
-                child_id = str(uuid4())
+
+                # Mark direction as expanded
+                seen_dirs.add(direction)
+
+                node_id = str(uuid4())
                 tree.create_node(
                     label + (f" ({rel})" if rel else ""),
-                    child_id,
+                    node_id,
                     parent=parent_id,
                 )
-                walk(target_id, child_id, next_depth)
+
+                walk(target_id, node_id, next_depth)
 
             incoming = [
                 (src, rel)
                 for src, rel in self.incoming.get(cim_id, [])
                 if src in self.nodes
             ]
+
             if incoming:
                 in_id = str(uuid4())
                 tree.create_node("IN", in_id, parent=parent)
 
                 for src, rel in incoming:
-                    add_child_or_splice(src, in_id, depth + 1, rel)
+                    add_child_or_splice(src, in_id, depth + 1, "IN", rel)
 
             outgoing = [
                 (tgt, rel)
                 for tgt, rel in self.outgoing.get(cim_id, [])
                 if tgt in self.nodes
             ]
+
             if outgoing:
                 out_id = str(uuid4())
                 tree.create_node("OUT", out_id, parent=parent)
 
                 for tgt, rel in outgoing:
-                    add_child_or_splice(tgt, out_id, depth + 1, rel)
+                    add_child_or_splice(tgt, out_id, depth + 1, "OUT", rel)
+
             path.remove(cim_id)
 
         walk(start_id, root_id, 0)
