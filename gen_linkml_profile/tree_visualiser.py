@@ -75,7 +75,8 @@ class TreeVisualiser:
         if isinstance(node_type, list):
             node_type = node_type[0]
         node_type = str(node_type).replace('cim:', '')
-        return f'{name} [{node_type}]'
+        node_code = node_id[-8:]
+        return f'[{node_type}] {name} ({node_code})'
 
     def show(
         self,
