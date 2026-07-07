@@ -43,6 +43,7 @@ Commands:
   path      Find the shortest path between two classes
   profile   Create a new LinkML schema based on the provided class...
   pydantic  Pre-process the schema for use by gen-pydantic
+  tree      Visualise a JSON-LD as tree
 ```
 
 Most commands that accept a file will also accept input from stdin, allowing

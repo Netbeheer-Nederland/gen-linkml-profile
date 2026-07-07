@@ -1,6 +1,6 @@
 [project]
 name = "gen-linkml-profile"
-version = "0.32.0"
+version = "0.33.0"
 description = ""
 authors = [
     { name = "Ritger Teunissen", email = "ritger.teunissen@alliander.com" }
