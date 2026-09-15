@@ -192,15 +192,21 @@ class SchemaProfiler(object):
                 # Not a class
                 continue
             for s_name, s_def in c_def.attributes.items():
+                ranges = []
                 if not s_def.required and skip:
                     continue
-                elem = self.view.get_element(s_def.range)
-                if elem is None:
-                    continue
-                if isinstance(elem, ClassDefinition):
-                    # range is a class
-                    #yield((c_name, elem.name, s_def.slot_uri.split(':')[1]))
-                    yield((c_name, elem.name))
+                if s_def.any_of:
+                    ranges.extend(e.range for e in s_def.any_of if e.range)
+                if s_def.range:
+                    elem = self.view.get_element(s_def.range)
+                    if elem is None:
+                        continue
+                    if isinstance(elem, ClassDefinition):
+                        # range is a class
+                        ranges.append(elem.name)
+                if ranges:
+                    for r in ranges:
+                        yield((c_name, r))
 
     def iterate_range(self, c_name, skip=False, p_name=None):
         """Process a hierarchy of classes by following the ranges"""

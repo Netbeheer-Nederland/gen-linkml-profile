@@ -87,7 +87,10 @@ class TreeVisualiser:
     ):
         if start_id is None:
             start_id = next(iter(self.nodes))
-
+        start_id = next(
+            (k for k in self.nodes if start_id in k),
+            None
+        )
         self.build_tree(
             start_id=start_id,
             max_depth=max_depth,
@@ -141,12 +144,12 @@ class TreeVisualiser:
                     label = self.label(target_id, id_only)
                     # subtree dedup: show reference instead of re-expanding
                     if target_id in expanded_subtrees:
-                        ref_id = str(uuid4())
-                        tree.create_node(
-                            f"↩ {label}",
-                            ref_id,
-                            parent=parent,
-                        )
+                        # ref_id = str(uuid4())
+                        # tree.create_node(
+                        #     f"↩ {label}",
+                        #     ref_id,
+                        #     parent=parent,
+                        # )
                         return
                     expanded_subtrees.add(target_id)
                     child_id = str(uuid4())
