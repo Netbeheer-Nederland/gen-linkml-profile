@@ -98,6 +98,87 @@ class TreeVisualiser:
             exclude_types=exclude_types,
         ).show()
 
+    # def build_tree(
+    #     self,
+    #     start_id: str,
+    #     max_depth: int = 3,
+    #     id_only: bool = False,
+    #     exclude_types=None,
+    # ) -> Tree:
+    #     if start_id not in self.nodes:
+    #         raise ValueError(f"Unknown start_id: {start_id}")
+
+    #     exclude_types = set(exclude_types or [])
+    #     tree = Tree()
+    #     root_id = str(uuid4())
+    #     tree.create_node(self.label(start_id, id_only), root_id)
+    #     # BFS queue: (node_id, tree_parent_id, depth)
+    #     queue = deque([(start_id, root_id, 0)])
+    #     # cycle protection (global path guard)
+    #     path = set()
+    #     # subtree dedup (critical for BaseVoltage etc.)
+    #     expanded_subtrees = set()
+
+    #     def is_excluded(node_id: str) -> bool:
+    #         node = self.nodes.get(node_id, {})
+    #         node_type = node.get("@type", "")
+    #         if isinstance(node_type, list):
+    #             node_type = node_type[0]
+    #         return node_type in exclude_types
+
+    #     while queue:
+    #         node_id, parent_id, depth = queue.popleft()
+    #         if depth >= max_depth:
+    #             continue
+    #         if node_id in path:
+    #             continue
+    #         path.add(node_id)
+
+    #         try:
+    #             def expand(target_id: str, parent: str, next_depth: int, rel: str = None):
+    #                 if target_id not in self.nodes:
+    #                     return
+    #                 if is_excluded(target_id):
+    #                     queue.append((target_id, parent, next_depth))
+    #                     return
+    #                 label = self.label(target_id, id_only)
+    #                 # subtree dedup: show reference instead of re-expanding
+    #                 if target_id in expanded_subtrees:
+    #                     return
+    #                 expanded_subtrees.add(target_id)
+    #                 child_id = str(uuid4())
+    #                 tree.create_node(
+    #                     label,
+    #                     child_id,
+    #                     parent=parent,
+    #                 )
+    #                 queue.append((target_id, child_id, next_depth))
+
+    #             incoming = [
+    #                 (src, rel)
+    #                 for src, rel in self.incoming.get(node_id, [])
+    #                 if src in self.nodes
+    #             ]
+    #             if incoming:
+    #                 in_id = str(uuid4())
+    #                 tree.create_node("IN", in_id, parent=parent_id)
+    #                 for src, rel in incoming:
+    #                     expand(src, in_id, depth + 1, rel)
+
+    #             outgoing = [
+    #                 (tgt, rel)
+    #                 for tgt, rel in self.outgoing.get(node_id, [])
+    #                 if tgt in self.nodes
+    #             ]
+    #             if outgoing:
+    #                 out_id = str(uuid4())
+    #                 tree.create_node("OUT", out_id, parent=parent_id)
+    #                 for tgt, rel in outgoing:
+    #                     expand(tgt, out_id, depth + 1, rel)
+    #         finally:
+    #             path.remove(node_id)
+    #     return tree
+
     def build_tree(
         self,
         start_id: str,
@@ -109,78 +190,99 @@ class TreeVisualiser:
             raise ValueError(f"Unknown start_id: {start_id}")
 
         exclude_types = set(exclude_types or [])
+
         tree = Tree()
         root_id = str(uuid4())
         tree.create_node(self.label(start_id, id_only), root_id)
+
         # BFS queue: (node_id, tree_parent_id, depth)
         queue = deque([(start_id, root_id, 0)])
-        # cycle protection (global path guard)
+
+        # Cycle protection (global path guard)
         path = set()
-        # subtree dedup (critical for BaseVoltage etc.)
+
+        # Subtree dedup: do not expand the same node more than once
         expanded_subtrees = set()
 
         def is_excluded(node_id: str) -> bool:
             node = self.nodes.get(node_id, {})
             node_type = node.get("@type", "")
+
             if isinstance(node_type, list):
                 node_type = node_type[0]
+
             return node_type in exclude_types
+
+        def can_expand(target_id: str) -> bool:
+            return (
+                target_id in self.nodes
+                and not is_excluded(target_id)
+                and target_id not in expanded_subtrees
+            )
+
+        def expand(
+            target_id: str,
+            parent: str,
+            next_depth: int,
+            rel: str = None,
+        ):
+            if not can_expand(target_id):
+                return
+
+            label = self.label(target_id, id_only)
+
+            expanded_subtrees.add(target_id)
+
+            child_id = str(uuid4())
+            tree.create_node(
+                label,
+                child_id,
+                parent=parent,
+            )
+
+            queue.append((target_id, child_id, next_depth))
 
         while queue:
             node_id, parent_id, depth = queue.popleft()
+
             if depth >= max_depth:
                 continue
+
             if node_id in path:
                 continue
+
             path.add(node_id)
 
             try:
-                def expand(target_id: str, parent: str, next_depth: int, rel: str = None):
-                    if target_id not in self.nodes:
-                        return
-                    if is_excluded(target_id):
-                        queue.append((target_id, parent, next_depth))
-                        return
-                    label = self.label(target_id, id_only)
-                    # subtree dedup: show reference instead of re-expanding
-                    if target_id in expanded_subtrees:
-                        # ref_id = str(uuid4())
-                        # tree.create_node(
-                        #     f"↩ {label}",
-                        #     ref_id,
-                        #     parent=parent,
-                        # )
-                        return
-                    expanded_subtrees.add(target_id)
-                    child_id = str(uuid4())
-                    tree.create_node(
-                        label,
-                        child_id,
-                        parent=parent,
-                    )
-                    queue.append((target_id, child_id, next_depth))
-
+                # Only include children that can actually be expanded.
                 incoming = [
                     (src, rel)
                     for src, rel in self.incoming.get(node_id, [])
-                    if src in self.nodes
+                    if can_expand(src)
                 ]
+
                 if incoming:
                     in_id = str(uuid4())
                     tree.create_node("IN", in_id, parent=parent_id)
+
                     for src, rel in incoming:
                         expand(src, in_id, depth + 1, rel)
 
+                # Only include children that can actually be expanded.
                 outgoing = [
                     (tgt, rel)
                     for tgt, rel in self.outgoing.get(node_id, [])
-                    if tgt in self.nodes
+                    if can_expand(tgt)
                 ]
+
                 if outgoing:
                     out_id = str(uuid4())
                     tree.create_node("OUT", out_id, parent=parent_id)
+
                     for tgt, rel in outgoing:
                         expand(tgt, out_id, depth + 1, rel)
+
             finally:
                 path.remove(node_id)
+
         return tree
