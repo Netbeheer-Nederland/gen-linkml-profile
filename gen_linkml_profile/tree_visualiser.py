@@ -98,87 +98,6 @@ class TreeVisualiser:
             exclude_types=exclude_types,
         ).show()
 
-    # def build_tree(
-    #     self,
-    #     start_id: str,
-    #     max_depth: int = 3,
-    #     id_only: bool = False,
-    #     exclude_types=None,
-    # ) -> Tree:
-    #     if start_id not in self.nodes:
-    #         raise ValueError(f"Unknown start_id: {start_id}")
-
-    #     exclude_types = set(exclude_types or [])
-    #     tree = Tree()
-    #     root_id = str(uuid4())
-    #     tree.create_node(self.label(start_id, id_only), root_id)
-    #     # BFS queue: (node_id, tree_parent_id, depth)
-    #     queue = deque([(start_id, root_id, 0)])
-    #     # cycle protection (global path guard)
-    #     path = set()
-    #     # subtree dedup (critical for BaseVoltage etc.)
-    #     expanded_subtrees = set()
-
-    #     def is_excluded(node_id: str) -> bool:
-    #         node = self.nodes.get(node_id, {})
-    #         node_type = node.get("@type", "")
-    #         if isinstance(node_type, list):
-    #             node_type = node_type[0]
-    #         return node_type in exclude_types
-
-    #     while queue:
-    #         node_id, parent_id, depth = queue.popleft()
-    #         if depth >= max_depth:
-    #             continue
-    #         if node_id in path:
-    #             continue
-    #         path.add(node_id)
-
-    #         try:
-    #             def expand(target_id: str, parent: str, next_depth: int, rel: str = None):
-    #                 if target_id not in self.nodes:
-    #                     return
-    #                 if is_excluded(target_id):
-    #                     queue.append((target_id, parent, next_depth))
-    #                     return
-    #                 label = self.label(target_id, id_only)
-    #                 # subtree dedup: show reference instead of re-expanding
-    #                 if target_id in expanded_subtrees:
-    #                     return
-    #                 expanded_subtrees.add(target_id)
-    #                 child_id = str(uuid4())
-    #                 tree.create_node(
-    #                     label,
-    #                     child_id,
-    #                     parent=parent,
-    #                 )
-    #                 queue.append((target_id, child_id, next_depth))
-
-    #             incoming = [
-    #                 (src, rel)
-    #                 for src, rel in self.incoming.get(node_id, [])
-    #                 if src in self.nodes
-    #             ]
-    #             if incoming:
-    #                 in_id = str(uuid4())
-    #                 tree.create_node("IN", in_id, parent=parent_id)
-    #                 for src, rel in incoming:
-    #                     expand(src, in_id, depth + 1, rel)
-
-    #             outgoing = [
-    #                 (tgt, rel)
-    #                 for tgt, rel in self.outgoing.get(node_id, [])
-    #                 if tgt in self.nodes
-    #             ]
-    #             if outgoing:
-    #                 out_id = str(uuid4())
-    #                 tree.create_node("OUT", out_id, parent=parent_id)
-    #                 for tgt, rel in outgoing:
-    #                     expand(tgt, out_id, depth + 1, rel)
-    #         finally:
-    #             path.remove(node_id)
-    #     return tree
-
     def build_tree(
         self,
         start_id: str,
@@ -190,34 +109,58 @@ class TreeVisualiser:
             raise ValueError(f"Unknown start_id: {start_id}")
 
         exclude_types = set(exclude_types or [])
+        max_children = 5
 
         tree = Tree()
+
         root_id = str(uuid4())
-        tree.create_node(self.label(start_id, id_only), root_id)
+        tree.create_node(
+            self.label(start_id, id_only),
+            root_id,
+        )
 
-        # BFS queue: (node_id, tree_parent_id, depth)
-        queue = deque([(start_id, root_id, 0)])
+        # BFS queue:
+        # (node_id, tree_parent_id, depth)
+        queue = deque([
+            (start_id, root_id, 0)
+        ])
 
-        # Cycle protection (global path guard)
+        # Nodes whose tree representation has already been created.
+        # This prevents the same subtree from being expanded more than once.
+        expanded_subtrees = {start_id}
+
+        # Nodes currently being processed on the current path.
+        # Protects against cycles in the graph.
         path = set()
-
-        # Subtree dedup: do not expand the same node more than once
-        expanded_subtrees = set()
 
         def is_excluded(node_id: str) -> bool:
             node = self.nodes.get(node_id, {})
             node_type = node.get("@type", "")
 
             if isinstance(node_type, list):
-                node_type = node_type[0]
+                node_type = node_type[0] if node_type else ""
 
             return node_type in exclude_types
 
-        def can_expand(target_id: str) -> bool:
+        def is_eligible(node_id: str) -> bool:
+            """
+            Return whether a node is allowed to appear in the tree.
+            """
             return (
-                target_id in self.nodes
-                and not is_excluded(target_id)
-                and target_id not in expanded_subtrees
+                node_id in self.nodes
+                and not is_excluded(node_id)
+            )
+
+        def can_expand(node_id: str) -> bool:
+            """
+            Return whether a node can be added to the tree and expanded.
+
+            A node may be eligible but already have its subtree represented
+            elsewhere in the tree. In that case it is not added again.
+            """
+            return (
+                is_eligible(node_id)
+                and node_id not in expanded_subtrees
             )
 
         def expand(
@@ -225,62 +168,117 @@ class TreeVisualiser:
             parent: str,
             next_depth: int,
             rel: str = None,
-        ):
+        ) -> bool:
+            """
+            Add a target node to the tree and queue it for expansion.
+
+            Returns True when the node was actually added.
+            """
             if not can_expand(target_id):
-                return
-
-            label = self.label(target_id, id_only)
-
-            expanded_subtrees.add(target_id)
+                return False
 
             child_id = str(uuid4())
+
             tree.create_node(
-                label,
+                self.label(target_id, id_only),
                 child_id,
                 parent=parent,
             )
 
-            queue.append((target_id, child_id, next_depth))
+            # Mark it immediately, rather than when it is dequeued.
+            # This prevents multiple references in the same level from
+            # queuing the same subtree.
+            expanded_subtrees.add(target_id)
+
+            queue.append((
+                target_id,
+                child_id,
+                next_depth,
+            ))
+
+            return True
+
+        def add_relationship_group(
+            relationships,
+            label: str,
+            parent_id: str,
+            depth: int,
+        ):
+            """
+            Add an IN or OUT group.
+
+            Only nodes that can actually be added are considered.
+            At most max_children nodes are added. If more eligible
+            children exist, the group label indicates truncation.
+            """
+
+            # Filter before truncating. This is important: excluded nodes
+            # and nodes whose subtree has already been expanded should not
+            # count towards the limit.
+            candidates = [
+                (node_id, rel)
+                for node_id, rel in relationships
+                if can_expand(node_id)
+            ]
+
+            if not candidates:
+                return
+
+            total = len(candidates)
+            truncated = total > max_children
+
+            # The actual children are limited to max_children.
+            selected = candidates[:max_children]
+
+            if truncated:
+                group_label = f"{label} (showing {max_children} of {total})"
+            else:
+                group_label = label
+
+            group_id = str(uuid4())
+
+            tree.create_node(
+                group_label,
+                group_id,
+                parent=parent_id,
+            )
+
+            for target_id, rel in selected:
+                expand(
+                    target_id,
+                    group_id,
+                    depth + 1,
+                    rel,
+                )
 
         while queue:
             node_id, parent_id, depth = queue.popleft()
 
+            # The node itself is still shown at max_depth, but its children
+            # are not expanded.
             if depth >= max_depth:
                 continue
 
+            # Additional cycle protection.
             if node_id in path:
                 continue
 
             path.add(node_id)
 
             try:
-                # Only include children that can actually be expanded.
-                incoming = [
-                    (src, rel)
-                    for src, rel in self.incoming.get(node_id, [])
-                    if can_expand(src)
-                ]
+                add_relationship_group(
+                    self.incoming.get(node_id, []),
+                    "IN",
+                    parent_id,
+                    depth,
+                )
 
-                if incoming:
-                    in_id = str(uuid4())
-                    tree.create_node("IN", in_id, parent=parent_id)
-
-                    for src, rel in incoming:
-                        expand(src, in_id, depth + 1, rel)
-
-                # Only include children that can actually be expanded.
-                outgoing = [
-                    (tgt, rel)
-                    for tgt, rel in self.outgoing.get(node_id, [])
-                    if can_expand(tgt)
-                ]
-
-                if outgoing:
-                    out_id = str(uuid4())
-                    tree.create_node("OUT", out_id, parent=parent_id)
-
-                    for tgt, rel in outgoing:
-                        expand(tgt, out_id, depth + 1, rel)
+                add_relationship_group(
+                    self.outgoing.get(node_id, []),
+                    "OUT",
+                    parent_id,
+                    depth,
+                )
 
             finally:
                 path.remove(node_id)
