@@ -94,6 +94,7 @@ class TreeVisualiser:
         max_depth: int = 3,
         max_children: int = 5,
         full_id: bool = False,
+        recursive: bool = False,
         exclude_types=None,
     ):
         if start_id is None:
@@ -107,6 +108,7 @@ class TreeVisualiser:
             max_depth=max_depth,
             max_children=max_children,
             full_id=full_id,
+            recursive=recursive,
             exclude_types=exclude_types,
         ).show()
 
@@ -116,6 +118,7 @@ class TreeVisualiser:
         max_depth: int = 3,
         max_children: int = 5,
         full_id: bool = False,
+        recursive: bool = False,
         exclude_types=None
     ) -> Tree:
         if start_id not in self.nodes:
@@ -268,7 +271,30 @@ class TreeVisualiser:
 
             # The node itself is still shown at max_depth, but its children
             # are not expanded.
+            # if depth >= max_depth:
+            #     continue
+
+            # The node itself is still shown at max_depth, but its children
+            # are not expanded. Add an explicit end marker so that it is
+            # visible that this is the end of the recursive expansion.
             if depth >= max_depth:
+                if not recursive:
+                    continue
+                relationships = (
+                    self.outgoing.get(node_id, [])
+                    + self.incoming.get(node_id, [])
+                )
+
+                for target_id, rel in relationships:
+                    if target_id in self.nodes and not is_excluded(target_id):
+                        end_id = str(uuid4())
+                        tree.create_node(
+                            f"↩ {self.label(target_id, full_id)}",
+                            end_id,
+                            parent=parent_id,
+                        )
+                        break
+
                 continue
 
             # Additional cycle protection.

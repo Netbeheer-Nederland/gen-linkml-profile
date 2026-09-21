@@ -277,9 +277,11 @@ def template(templatefile, var, delimiter):
         help='Maximum number of children to display for each parent')
 @option('--full-id', is_flag=True, default=False,
         help='Use full @id in output')
+@option('--recursive', is_flag=True, default=False,
+        help='Include the node that caused graph recursion to stop')
 @option('--exclude', '-e', multiple=True, help='Type(s) to exclude from output')
 @argument('files', nargs=-1, type=File('rt'))
-def tree(files, root_id, depth, max_children, full_id, exclude):
+def tree(files, root_id, depth, max_children, full_id, recursive, exclude):
     """Visualise a JSON-LD as tree"""
     from .tree_visualiser import TreeVisualiser
     from json import load
@@ -295,4 +297,4 @@ def tree(files, root_id, depth, max_children, full_id, exclude):
         }
     visualiser = TreeVisualiser(nodes)
     echo()
-    visualiser.show(root_id, depth, max_children, full_id, exclude)
+    visualiser.show(root_id, depth, max_children, full_id, recursive, exclude)
