@@ -60,29 +60,40 @@ class TreeVisualiser:
                             )
         return outgoing
 
-    def label(self, node_id: str, id_only: bool = False) -> str:
+    def label(self, node_id: str, full_id: bool = False) -> str:
+        """
+            cim:TransformerEnd.endNumber
+            cim:AnalogValue.value
+            cim:Measurement.unitSymbol
+            cim:Measurement.unitSymbol
+            cim:Measurement.unitMultiplier
+        """
         node = self.nodes.get(node_id, {})
         name = (
-            node_id
-            if id_only
-            else (
-                node.get('cim:IdentifiedObject.name')
-                or node.get('name')
-                or node_id[-8:]
-            )
+            node.get('cim:IdentifiedObject.name')
+            or node.get('name')
+            or node_id[-8:]
         )
+        value = (
+            node.get('cim:TransformerEnd.endNumber')
+            or node.get('cim:AnalogValue.value')
+            or node.get('cim:ActivePower.value')
+            or None
+        )
+        name = f'{name} |{value}|' if value else name
         node_type = node.get('@type', '')
         if isinstance(node_type, list):
             node_type = node_type[0]
         node_type = str(node_type).replace('cim:', '')
-        node_code = node_id[-8:]
+        node_code = node_id[-8:] if not full_id else node_id
         return f'[{node_type}] {name} ({node_code})'
 
     def show(
         self,
         start_id: str,
         max_depth: int = 3,
-        id_only: bool = False,
+        max_children: int = 5,
+        full_id: bool = False,
         exclude_types=None,
     ):
         if start_id is None:
@@ -94,7 +105,8 @@ class TreeVisualiser:
         self.build_tree(
             start_id=start_id,
             max_depth=max_depth,
-            id_only=id_only,
+            max_children=max_children,
+            full_id=full_id,
             exclude_types=exclude_types,
         ).show()
 
@@ -102,20 +114,20 @@ class TreeVisualiser:
         self,
         start_id: str,
         max_depth: int = 3,
-        id_only: bool = False,
-        exclude_types=None,
+        max_children: int = 5,
+        full_id: bool = False,
+        exclude_types=None
     ) -> Tree:
         if start_id not in self.nodes:
             raise ValueError(f"Unknown start_id: {start_id}")
 
         exclude_types = set(exclude_types or [])
-        max_children = 5
 
         tree = Tree()
 
         root_id = str(uuid4())
         tree.create_node(
-            self.label(start_id, id_only),
+            self.label(start_id, full_id),
             root_id,
         )
 
@@ -180,7 +192,7 @@ class TreeVisualiser:
             child_id = str(uuid4())
 
             tree.create_node(
-                self.label(target_id, id_only),
+                self.label(target_id, full_id),
                 child_id,
                 parent=parent,
             )
