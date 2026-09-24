@@ -78,6 +78,8 @@ class TreeVisualiser:
             node.get('cim:TransformerEnd.endNumber')
             or node.get('cim:AnalogValue.value')
             or node.get('cim:ActivePower.value')
+            or node.get('cim:StreetAddress.postalCode')
+            or node.get('cim:StreetDetail.number')
             or None
         )
         name = f'{name} |{value}|' if value else name

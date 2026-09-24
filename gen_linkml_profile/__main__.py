@@ -298,3 +298,43 @@ def tree(files, root_id, depth, max_children, full_id, recursive, exclude):
     visualiser = TreeVisualiser(nodes)
     echo()
     visualiser.show(root_id, depth, max_children, full_id, recursive, exclude)
+
+
+@cli.command()
+@option('--root-id', help='Root @id')
+@argument('files', nargs=-1, type=File('rt'))
+def split(files, root_id):
+    """Visualise a JSON-LD as tree"""
+    from .tree_walker import TreeWalker
+    from json import load, dumps
+
+
+    nodes = {}
+    for f in files:
+        log.info(f'Loading file: {f.name}')
+        # get nodes from @graph
+        nodes = nodes | {
+            n["@id"]: n
+            for n in load(f).get("@graph", [])
+            if "@id" in n
+        }
+
+    log.info('Building tree')
+
+    walker = TreeWalker(
+        nodes,
+        stop_properties={
+            'cim:Line.Region',
+            'cim:Substation.Region',
+            'cim:VoltageLevel.BaseVoltage'
+        },
+    )
+
+    log.info('Dumping tree to JSON-LD')
+
+    related = walker.related_objects(root_id)
+    echo(dumps(
+        {'@graph': list(related.values())},
+        indent=4,
+        ensure_ascii=False,
+    ))
